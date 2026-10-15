@@ -1,0 +1,28 @@
+name: hermes-office
+version: 0.1.0
+manifest_version: 2
+description: >-
+  A Desk for Office work: tracked Word edits, PowerPoint shape edits and deck
+  composition, Excel edits with receipts and LibreOffice recalc — all guarded,
+  backed up and reviewable from the Desk page.
+license: MIT
+provides_tools:
+  - office_desk
+  - office_inspect
+  - office_search
+  - docx_tracked_edit
+  - docx_comment
+  - docx_redline_accept_reject
+  - pptx_inspect_formats
+  - pptx_edit_shape
+  - pptx_compose_decks
+  - pptx_diff
+  - xlsx_edit
+  - xlsx_recalc
+  - xlsx_diff
+  - office_receipt
+python_dependencies:
+  - paper-docx>=0.2.1,<0.3
+  - paper-pptx>=0.2.1,<0.3
+  - paper-xlsx>=0.2.2,<0.3
+tags: [office, docx, pptx, xlsx, word, excel, powerpoint]
