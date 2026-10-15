@@ -22,6 +22,7 @@ await writeFile(
 import { createRoot } from 'react-dom/client'
 import * as sdk from '../sdk-shim'
 import plugin from '../../plugin'
+import { $selectedWorkstream } from '../../src/state.js'
 
 const disposers = []
 const ctx = {
@@ -76,6 +77,11 @@ const ctx = {
 }
 
 plugin.register(ctx)
+
+const wsParam = new URLSearchParams(window.location.search).get('ws')
+if (wsParam) {
+  $selectedWorkstream.set(Number(wsParam))
+}
 
 if (!ctx.page) {
   throw new Error('the plugin registered no ROUTES_AREA contribution')
