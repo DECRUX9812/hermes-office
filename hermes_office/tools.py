@@ -1,336 +1,277 @@
+"""Agent tool handlers: `handler(args, **kwargs) -> JSON string`. They never raise."""
+
 from __future__ import annotations
 
+import functools
 import json
 from pathlib import Path
 from typing import Any, Callable
 
-from docx.errors import PaperRefusal as DocxPaperRefusal
-from openpyxl.errors import PaperRefusal as XlsxPaperRefusal
-from pptx.errors import PaperRefusal as PptxPaperRefusal
-
-from .bridge import data_dir, emit
-from .desk import Desk
-from .docx_ops import accept_or_reject_docx, comment_docx, tracked_edit_docx
-from .errors import OutsideDeskError, PolicyRefusal, UnsupportedFileError
-from .guard import atomic_write, backup, kind_of, refusal_payload, resolve_path, sha256
+from . import service
+from .docx_ops import comment_docx, redline_docx, tracked_edit_docx
+from .errors import NotFoundError, OutsideDeskError
+from .guard import refusal_payload, resolve_path
 from .inspect_ops import inspect_file
-from .preview import preview_file
-from .search_ops import search_path_or_folder
-from .diff_ops import diff_file
 from .pptx_ops import compose_pptx_decks, diff_pptx, edit_pptx_shape, inspect_pptx_formats
-from .xlsx_ops import edit_xlsx, recalc_xlsx, diff_xlsx
+from .search_ops import search_path_or_folder
+from .service import WriteOp
+from .xlsx_ops import diff_xlsx, edit_xlsx, recalc_xlsx
+
+Handler = Callable[..., str]
 
 
 def _json(payload: Any) -> str:
     return json.dumps(payload, ensure_ascii=False, default=str)
 
 
-def _desk() -> Desk:
-    return Desk(data_dir())
-
-
-def _get(args: dict[str, Any], name: str, default: Any = None) -> Any:
-    value = args.get(name, default)
-    return default if value is None else value
-
-
-def _workstream_for_write(desk: Desk, args: dict[str, Any], *, path: str | None, tool: str, title: str | None = None) -> dict[str, Any]:
-    workstream_id = args.get("workstream_id")
-    session_id = args.get("session_id")
-    if workstream_id is not None:
-        ws = desk.get_workstream(int(workstream_id))
-        if ws is None:
-            raise OutsideDeskError(f"unknown workstream {workstream_id}")
-        return ws
-    if session_id:
-        ws = desk.workstream_for_session(str(session_id))
-        if ws is not None:
-            return ws
-    if path is None:
-        raise OutsideDeskError("a desk path is required")
-    folder = desk.folder_for_path(path)
-    if folder is None:
-        raise OutsideDeskError(str(resolve_path(path)))
-    return desk.create_workstream(folder["id"], title or tool, request=args.get("request"), session_id=session_id, status="running")
-
-
-def _tool_event(desk: Desk, workstream_id: int, kind: str, tool: str, path: str | None, summary: str, op_id: str) -> dict[str, Any]:
-    return desk.add_event(workstream_id, kind, tool=tool, path=path, summary=summary, data={"op_id": op_id})
-
-
-def _refuse(desk: Desk, ws: dict[str, Any] | None, tool: str, path: str | None, exc: Exception, op_id: str | None = None) -> str:
-    if ws is not None:
-        desk.add_event(ws["id"], "refused", tool=tool, path=path, summary=str(exc), data={"op_id": op_id or tool})
-        desk.update_workstream(ws["id"], status="needs_you", needs_you=1, note=str(exc))
+def tool(fn: Callable[..., dict[str, Any]]) -> Handler:
+    @functools.wraps(fn)
+    def handler(args: dict[str, Any], **kwargs: Any) -> str:
         try:
-            emit("workstream.updated", {"workstream_id": ws["id"], "status": "needs_you"})
-        except Exception:
-            pass
-    return _json(refusal_payload(exc))
+            return _json({"ok": True, **fn(args or {}, kwargs.get("session_id"))})
+        except Exception as exc:
+            return _json(refusal_payload(exc))
+
+    return handler
 
 
-def _finalize(desk: Desk, ws: dict[str, Any], tool: str, path: str | None, op_id: str, receipt: dict[str, Any] | None = None, needs_you: bool = False) -> None:
-    desk.add_event(ws["id"], "tool_finished", tool=tool, path=path, summary=tool, data={"op_id": op_id})
-    desk.update_workstream(ws["id"], status="needs_you" if needs_you else "done", needs_you=1 if needs_you else 0, note=ws.get("note"))
-    if receipt is not None:
-        desk.track_file(ws["id"], path or receipt.get("path", ""), "changed", receipt_id=receipt["id"], kind=kind_of(path or receipt.get("path", "")))
-    try:
-        emit("workstream.updated", {"workstream_id": ws["id"], "status": "needs_you" if needs_you else "done"})
-    except Exception:
-        pass
+def _write(op: WriteOp, args: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+    out = service.run_write(op, workstream_id=args.get("workstream_id"), session_id=session_id)
+    result = out.pop("result")
+    return {**out, **result}
 
 
-def office_desk(args: dict[str, Any], **kwargs: Any) -> str:
-    desk = _desk()
-    action = args.get("action")
-    try:
-        if action == "add_folder":
-            path = resolve_path(args["path"])
-            if not path.exists() or not path.is_dir():
-                raise OutsideDeskError(f"folder does not exist: {path}")
-            return _json({"ok": True, "folder": desk.add_folder(path)})
-        if action == "remove_folder":
-            desk.remove_folder(int(args["folder_id"]))
-            return _json({"ok": True})
-        if action == "list":
-            return _json({"ok": True, "folders": desk.list_folders(), "workstreams": desk.list_workstreams()})
-        if action == "status":
-            workstream_id = int(args["workstream_id"])
-            return _json({"ok": True, "workstream": desk.get_workstream(workstream_id), "now": desk.now(workstream_id)})
-        if action == "needs_you":
-            ws = desk.update_workstream(int(args["workstream_id"]), status="needs_you", needs_you=1, note=args.get("note"))
-            return _json({"ok": True, "workstream": ws})
-        if action == "done":
-            ws = desk.update_workstream(int(args["workstream_id"]), status="done", needs_you=0, note=args.get("note"))
-            return _json({"ok": True, "workstream": ws})
-        if action == "attach":
-            ws = desk.update_workstream(int(args["workstream_id"]), session_id=args.get("session_id"), title=args.get("title") or desk.get_workstream(int(args["workstream_id"]))["title"])
-            return _json({"ok": True, "workstream": ws})
-        raise ValueError(f"unknown action: {action}")
-    except Exception as exc:
-        return _json(refusal_payload(exc))
+def _current_ws(d, args: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+    if args.get("workstream_id") is not None:
+        ws = d.get_workstream(int(args["workstream_id"]))
+    else:
+        ws = d.workstream_for_session(session_id) if session_id else None
+    if not ws:
+        raise NotFoundError("no workstream: pass workstream_id, or edit a Desk file first (that opens one for this chat)")
+    return ws
 
 
-def office_inspect(args: dict[str, Any], **kwargs: Any) -> str:
-    try:
-        return _json({"ok": True, **inspect_file(args["path"], detail=args.get("detail", "summary"))})
-    except Exception as exc:
-        return _json(refusal_payload(exc))
-
-
-def office_search(args: dict[str, Any], **kwargs: Any) -> str:
-    try:
-        hits = search_path_or_folder(args.get("path"), args.get("folder"), query=args["query"], match=args.get("match", "exact"), regex=bool(args.get("regex", False)))
-        return _json({"ok": True, "matches": hits})
-    except Exception as exc:
-        return _json(refusal_payload(exc))
-
-
-def docx_tracked_edit(args: dict[str, Any], **kwargs: Any) -> str:
-    desk = _desk()
-    path = args["path"]
-    ws = None
-    op_id = kwargs.get("task_id") or "docx_tracked_edit"
-    try:
-        ws = _workstream_for_write(desk, args, path=path, tool="docx_tracked_edit")
-        _tool_event(desk, ws["id"], "tool_started", "docx_tracked_edit", path, args["find"], op_id)
-        before = sha256(path) if Path(path).exists() else None
-        backup_path = backup(desk.data_dir, ws["id"], op_id, path) if before is not None else None
-        result = tracked_edit_docx(path, find=args["find"], replace=args["replace"], nth=args.get("nth"), match=args.get("match", "exact"), author=args.get("author"))
-        after = sha256(path)
-        receipt = desk.add_receipt(ws["id"], "docx_tracked_edit", path, f"replace {args['find']}", before, after, backup_path, result)
-        desk.track_file(ws["id"], path, "changed", receipt_id=receipt["id"], kind="docx")
-        _finalize(desk, ws, "docx_tracked_edit", path, op_id, receipt=receipt, needs_you=True)
-        return _json({"ok": True, "receipt": receipt, **result})
-    except Exception as exc:
-        return _refuse(desk, ws, "docx_tracked_edit", path, exc, op_id)
-
-
-def docx_comment(args: dict[str, Any], **kwargs: Any) -> str:
-    desk = _desk()
-    path = args["path"]
-    ws = None
-    op_id = kwargs.get("task_id") or "docx_comment"
-    try:
-        ws = _workstream_for_write(desk, args, path=path, tool="docx_comment")
-        _tool_event(desk, ws["id"], "tool_started", "docx_comment", path, args["find"], op_id)
-        before = sha256(path) if Path(path).exists() else None
-        backup_path = backup(desk.data_dir, ws["id"], op_id, path) if before is not None else None
-        result = comment_docx(path, find=args["find"], text=args["text"], author=args["author"], nth=args.get("nth"), reply_to=args.get("reply_to"), resolve_comment=bool(args.get("resolve", False)))
-        after = sha256(path)
-        receipt = desk.add_receipt(ws["id"], "docx_comment", path, f"comment {args['find']}", before, after, backup_path, result)
-        desk.track_file(ws["id"], path, "changed", receipt_id=receipt["id"], kind="docx")
-        _finalize(desk, ws, "docx_comment", path, op_id, receipt=receipt, needs_you=False)
-        return _json({"ok": True, "receipt": receipt, **result})
-    except Exception as exc:
-        return _refuse(desk, ws, "docx_comment", path, exc, op_id)
-
-
-def docx_redline_accept_reject(args: dict[str, Any], **kwargs: Any) -> str:
-    desk = _desk()
-    path = args["path"]
-    ws = None
-    op_id = kwargs.get("task_id") or "docx_redline_accept_reject"
-    try:
-        ws = _workstream_for_write(desk, args, path=path, tool="docx_redline_accept_reject")
-        _tool_event(desk, ws["id"], "tool_started", "docx_redline_accept_reject", path, args["action"], op_id)
-        before = sha256(path) if Path(path).exists() else None
-        backup_path = backup(desk.data_dir, ws["id"], op_id, path) if before is not None else None
-        result = accept_or_reject_docx(path, args["action"], author=args.get("author"), compare_with=args.get("compare_with"))
-        after = sha256(path)
-        receipt = desk.add_receipt(ws["id"], "docx_redline_accept_reject", path, args["action"], before, after, backup_path, result)
-        desk.track_file(ws["id"], path, "changed", receipt_id=receipt["id"], kind="docx")
-        _finalize(desk, ws, "docx_redline_accept_reject", path, op_id, receipt=receipt, needs_you=True)
-        return _json({"ok": True, "receipt": receipt, **result})
-    except Exception as exc:
-        return _refuse(desk, ws, "docx_redline_accept_reject", path, exc, op_id)
-
-
-def pptx_inspect_formats_handler(args: dict[str, Any], **kwargs: Any) -> str:
-    try:
-        return _json({"ok": True, **inspect_pptx_formats(args["path"], slide=int(args["slide"]), shape=args["shape"])})
-    except Exception as exc:
-        return _json(refusal_payload(exc))
-
-
-def pptx_edit_shape_handler(args: dict[str, Any], **kwargs: Any) -> str:
-    desk = _desk()
-    path = args["path"]
-    ws = None
-    op_id = kwargs.get("task_id") or "pptx_edit_shape"
-    try:
-        ws = _workstream_for_write(desk, args, path=path, tool="pptx_edit_shape")
-        _tool_event(desk, ws["id"], "tool_started", "pptx_edit_shape", path, args["shape"], op_id)
-        before = sha256(path) if Path(path).exists() else None
-        backup_path = backup(desk.data_dir, ws["id"], op_id, path) if before is not None else None
-        result = edit_pptx_shape(path, slide=int(args["slide"]), shape=args["shape"], ops=list(args["ops"]))
-        after = sha256(path)
-        receipt = desk.add_receipt(ws["id"], "pptx_edit_shape", path, args["shape"], before, after, backup_path, result)
-        desk.track_file(ws["id"], path, "changed", receipt_id=receipt["id"], kind="pptx")
-        _finalize(desk, ws, "pptx_edit_shape", path, op_id, receipt=receipt, needs_you=False)
-        return _json({"ok": True, "receipt": receipt, **result})
-    except Exception as exc:
-        return _refuse(desk, ws, "pptx_edit_shape", path, exc, op_id)
-
-
-def pptx_compose_decks_handler(args: dict[str, Any], **kwargs: Any) -> str:
-    desk = _desk()
-    dest = args["dest"]
-    ws = None
-    op_id = kwargs.get("task_id") or "pptx_compose_decks"
-    try:
-        ws = _workstream_for_write(desk, args, path=dest, tool="pptx_compose_decks")
-        _tool_event(desk, ws["id"], "tool_started", "pptx_compose_decks", dest, args["mode"], op_id)
-        before = sha256(dest) if Path(dest).exists() else None
-        backup_path = backup(desk.data_dir, ws["id"], op_id, dest) if Path(dest).exists() else None
-        result = compose_pptx_decks(dest, list(args["sources"]), mode=args["mode"], output_path=args["output_path"])
-        after = sha256(args["output_path"])
-        receipt = desk.add_receipt(ws["id"], "pptx_compose_decks", args["output_path"], args["mode"], before, after, backup_path, result)
-        desk.track_file(ws["id"], args["output_path"], "created" if before is None else "changed", receipt_id=receipt["id"], kind="pptx")
-        _finalize(desk, ws, "pptx_compose_decks", args["output_path"], op_id, receipt=receipt, needs_you=False)
-        return _json({"ok": True, "receipt": receipt, **result})
-    except Exception as exc:
-        return _refuse(desk, ws, "pptx_compose_decks", dest, exc, op_id)
-
-
-def pptx_diff_handler(args: dict[str, Any], **kwargs: Any) -> str:
-    try:
-        return _json({"ok": True, "diff": diff_pptx(args["a"], args["b"], detail=args.get("detail", "text"))})
-    except Exception as exc:
-        return _json(refusal_payload(exc))
-
-
-def xlsx_edit_handler(args: dict[str, Any], **kwargs: Any) -> str:
-    desk = _desk()
-    path = args["path"]
-    ws = None
-    op_id = kwargs.get("task_id") or "xlsx_edit"
-    try:
-        ws = _workstream_for_write(desk, args, path=path, tool="xlsx_edit")
-        _tool_event(desk, ws["id"], "tool_started", "xlsx_edit", path, "edit", op_id)
-        before = sha256(path) if Path(path).exists() else None
-        backup_path = backup(desk.data_dir, ws["id"], op_id, path) if Path(path).exists() else None
-        result = edit_xlsx(path, ops=list(args["ops"]))
-        after = sha256(path)
-        receipt = desk.add_receipt(ws["id"], "xlsx_edit", path, "edit", before, after, backup_path, result)
-        desk.track_file(ws["id"], path, "changed" if before is not None else "created", receipt_id=receipt["id"], kind="xlsx")
-        _finalize(desk, ws, "xlsx_edit", path, op_id, receipt=receipt, needs_you=False)
-        return _json({"ok": True, "receipt": receipt, **result})
-    except Exception as exc:
-        return _refuse(desk, ws, "xlsx_edit", path, exc, op_id)
-
-
-def xlsx_recalc_handler(args: dict[str, Any], **kwargs: Any) -> str:
-    desk = _desk()
-    path = args["path"]
-    ws = None
-    op_id = kwargs.get("task_id") or "xlsx_recalc"
-    try:
-        ws = _workstream_for_write(desk, args, path=path, tool="xlsx_recalc")
-        _tool_event(desk, ws["id"], "tool_started", "xlsx_recalc", path, "recalc", op_id)
-        before = sha256(path) if Path(path).exists() else None
-        backup_path = backup(desk.data_dir, ws["id"], op_id, path) if Path(path).exists() else None
-        result = recalc_xlsx(path, read=list(args["read"]))
-        if not result.get("recalculated"):
-            receipt = desk.add_receipt(ws["id"], "xlsx_recalc", path, "recalc", before, before, backup_path, result)
-            desk.track_file(ws["id"], path, "working", receipt_id=receipt["id"], kind="xlsx")
-            _finalize(desk, ws, "xlsx_recalc", path, op_id, receipt=receipt, needs_you=False)
-            return _json({"ok": True, **result})
-        after = sha256(path)
-        receipt = desk.add_receipt(ws["id"], "xlsx_recalc", path, "recalc", before, after, backup_path, result)
-        desk.track_file(ws["id"], path, "changed", receipt_id=receipt["id"], kind="xlsx")
-        _finalize(desk, ws, "xlsx_recalc", path, op_id, receipt=receipt, needs_you=False)
-        return _json({"ok": True, **result})
-    except Exception as exc:
-        return _refuse(desk, ws, "xlsx_recalc", path, exc, op_id)
-
-
-def xlsx_diff_handler(args: dict[str, Any], **kwargs: Any) -> str:
-    try:
-        return _json({"ok": True, "diff": diff_xlsx(args["a"], args["b"])})
-    except Exception as exc:
-        return _json(refusal_payload(exc))
-
-
-def office_receipt_handler(args: dict[str, Any], **kwargs: Any) -> str:
-    desk = _desk()
+@tool
+def office_desk(args: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+    d = service.desk()
     action = args["action"]
-    try:
-        if action == "list":
-            workstream_id = args.get("workstream_id")
-            receipts = desk.list_receipts(int(workstream_id)) if workstream_id is not None else desk.list_receipts()
-            return _json({"ok": True, "receipts": receipts})
-        if action == "show":
-            receipt = desk.get_receipt(int(args["receipt_id"]))
-            if receipt is None:
-                raise OutsideDeskError("receipt not found")
-            return _json({"ok": True, "receipt": receipt})
-        if action == "revert":
-            receipt = desk.get_receipt(int(args["receipt_id"]))
-            if receipt is None:
-                raise OutsideDeskError("receipt not found")
-            path = Path(receipt["path"])
-            before = sha256(path) if path.exists() else None
-            backup_path = receipt.get("backup_path")
-            if backup_path is None:
-                raise OutsideDeskError("receipt has no backup")
-            revert_backup = backup(desk.data_dir, receipt["workstream_id"], f"revert-{receipt['id']}", path) if path.exists() else None
-            src = Path(backup_path)
-            atomic_write(path, lambda tmp: tmp.write_bytes(src.read_bytes()))
-            after = sha256(path)
-            new_receipt = desk.add_receipt(
-                receipt["workstream_id"],
-                "office_receipt",
-                path,
-                f"revert receipt {receipt['id']}",
-                before,
-                after,
-                revert_backup or backup_path,
-                {"ok": True, "reverted": receipt["id"]},
-            )
-            desk.mark_reverted(int(args["receipt_id"]))
-            desk.track_file(receipt["workstream_id"], path, "changed", receipt_id=new_receipt["id"], kind=kind_of(path))
-            return _json({"ok": True, "receipt": new_receipt})
-        raise ValueError(f"unknown action: {action}")
-    except Exception as exc:
-        return _json(refusal_payload(exc))
+    if action == "list":
+        return {"folders": d.list_folders(), "workstreams": d.list_workstreams(limit=20)}
+    if action == "add_folder":
+        path = resolve_path(args["path"])
+        if not path.is_dir():
+            raise FileNotFoundError(f"{path} is not a folder")
+        return {"folder": d.add_folder(path)}
+    if action == "remove_folder":
+        if d.get_folder(int(args["folder_id"])) is None:
+            raise NotFoundError(f"folder {args['folder_id']} not found")
+        d.remove_folder(int(args["folder_id"]))
+        return {"removed": int(args["folder_id"])}
+    if action == "status":
+        ws = _current_ws(d, args, session_id)
+        return {"workstream": ws, "now": d.now(ws["id"]), "files": d.files(ws["id"])}
+    if action == "needs_you":
+        ws = _current_ws(d, args, session_id)
+        return {"workstream": service.set_status(d, ws["id"], "needs_you", note=args.get("note") or "Please review", needs_you=True)}
+    if action == "done":
+        ws = _current_ws(d, args, session_id)
+        return {"workstream": service.set_status(d, ws["id"], "done", note=args.get("note"), needs_you=False)}
+    if action == "attach":
+        ws = _current_ws(d, {"workstream_id": args.get("workstream_id")}, None)
+        fields = {"session_id": session_id} if session_id else {}
+        if args.get("title"):
+            fields["title"] = args["title"]
+        ws = d.update_workstream(ws["id"], **fields)
+        service.notify(ws["id"])
+        return {"workstream": ws}
+    raise ValueError(f"unknown action {action!r}")
+
+
+@tool
+def office_inspect(args: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+    result = inspect_file(args["path"], detail=args.get("detail") or "summary")
+    service.note_read(service.desk(), tool="office_inspect", path=args["path"], session_id=session_id, workstream_id=args.get("workstream_id"))
+    return result
+
+
+@tool
+def office_search(args: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+    results = search_path_or_folder(args.get("path"), args.get("folder"), query=args["query"], match=args.get("match") or "exact", regex=bool(args.get("regex")))
+    return {"results": results, "files_with_matches": sum(1 for r in results if r.get("matches"))}
+
+
+@tool
+def docx_tracked_edit(args: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+    path = args["path"]
+    name = Path(path).name
+    op = WriteOp(
+        tool="docx_tracked_edit",
+        path=path,
+        kind="docx",
+        summary=f"Tracked change: {args['find'][:40]!r} → {args['replace'][:40]!r}",
+        needs_you=f"Review tracked changes in {name}",
+        run=lambda: tracked_edit_docx(path, find=args["find"], replace=args["replace"], nth=args.get("nth"), match=args.get("match") or "exact", author=args.get("author")),
+    )
+    return _write(op, args, session_id)
+
+
+@tool
+def docx_comment(args: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+    path = args["path"]
+    if args.get("resolve") is not None:
+        summary = f"Resolve comment {args['resolve']}"
+    elif args.get("reply_to") is not None:
+        summary = f"Reply to comment {args['reply_to']}"
+    else:
+        summary = f"Comment on {str(args.get('find', ''))[:40]!r}"
+    op = WriteOp(
+        tool="docx_comment",
+        path=path,
+        kind="docx",
+        summary=summary,
+        run=lambda: comment_docx(path, text=args.get("text") or "", find=args.get("find"), author=args.get("author"), nth=args.get("nth"), reply_to=args.get("reply_to"), resolve_id=args.get("resolve")),
+    )
+    return _write(op, args, session_id)
+
+
+@tool
+def docx_redline_accept_reject(args: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+    path = args["path"]
+    action = args["action"]
+    if action == "compare":
+        original = args.get("compare_with")
+        if not original:
+            raise ValueError("compare needs compare_with (the original document)")
+        revised = resolve_path(path)
+        output = args.get("output_path") or str(revised.with_name(f"{revised.stem} (redline).docx"))
+        op = WriteOp(
+            tool="docx_redline_accept_reject",
+            path=str(revised),
+            output_path=output,
+            kind="docx",
+            summary=f"Redline {Path(original).name} → {revised.name}",
+            needs_you=f"Review the redline {Path(output).name}",
+            run=lambda: redline_docx(original, revised, output, author=args.get("author")),
+        )
+        return _write(op, args, session_id)
+    if action not in ("accept", "reject"):
+        raise ValueError("action must be accept, reject or compare")
+    out = service.resolve_redline(path, action=action, workstream_id=args.get("workstream_id"), author=args.get("author"), scope=args.get("scope") or "all", index=args.get("index"), session_id=session_id)
+    result = out.pop("result")
+    return {**out, **result}
+
+
+@tool
+def pptx_inspect_formats(args: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+    return inspect_pptx_formats(args["path"], slide=int(args["slide"]), shape=args["shape"])
+
+
+@tool
+def pptx_edit_shape(args: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+    path = args["path"]
+    ops = list(args["ops"])
+    names = ", ".join(str(o.get("op")) for o in ops)
+    target = f" {args['shape']!r}" if args.get("shape") else ""
+    op = WriteOp(
+        tool="pptx_edit_shape",
+        path=path,
+        kind="pptx",
+        summary=f"Slide {int(args['slide']) + 1}{target}: {names}",
+        run=lambda: edit_pptx_shape(path, slide=int(args["slide"]), shape=args.get("shape"), ops=ops),
+    )
+    return _write(op, args, session_id)
+
+
+@tool
+def pptx_compose_decks(args: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+    path = args["path"]
+    output = args.get("output_path") or path
+    sources = list(args["sources"])
+    for source in sources:
+        if not resolve_path(source["path"]).is_file():
+            raise FileNotFoundError(f"source deck {source['path']} does not exist")
+    op = WriteOp(
+        tool="pptx_compose_decks",
+        path=path,
+        output_path=output,
+        kind="pptx",
+        summary=f"Import slides from {', '.join(Path(s['path']).name for s in sources)} ({args['mode']})",
+        run=lambda: compose_pptx_decks(path, sources, mode=args["mode"], output_path=output),
+    )
+    return _write(op, args, session_id)
+
+
+@tool
+def pptx_diff(args: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+    return {"diff": diff_pptx(args["a"], args["b"], detail=args.get("detail") or "text")}
+
+
+@tool
+def xlsx_edit(args: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+    path = args["path"]
+    ops = list(args["ops"])
+    refs = [o.get("ref") or o.get("op") for o in ops][:4]
+    op = WriteOp(
+        tool="xlsx_edit",
+        path=path,
+        kind="xlsx",
+        summary=f"Edit {', '.join(str(r) for r in refs)}" + ("…" if len(ops) > 4 else ""),
+        run=lambda: edit_xlsx(path, ops=ops),
+    )
+    return _write(op, args, session_id)
+
+
+@tool
+def xlsx_recalc(args: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+    path = args["path"]
+    op = WriteOp(tool="xlsx_recalc", path=path, kind="xlsx", summary="Recalculate formulas", run=lambda: recalc_xlsx(path, read=args.get("read") or []))
+    return _write(op, args, session_id)
+
+
+@tool
+def xlsx_diff(args: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+    return {"diff": diff_xlsx(args["a"], args["b"])}
+
+
+@tool
+def office_receipt(args: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+    d = service.desk()
+    action = args["action"]
+    if action == "list":
+        ws_id = args.get("workstream_id")
+        if ws_id is None and session_id:
+            ws = d.workstream_for_session(session_id)
+            ws_id = ws["id"] if ws else None
+        receipts = d.list_receipts(int(ws_id)) if ws_id is not None else d.list_receipts()[:50]
+        return {"receipts": [{k: v for k, v in r.items() if k != "library_report"} for r in receipts]}
+    if action == "show":
+        receipt = d.get_receipt(int(args["receipt_id"]))
+        if receipt is None:
+            raise NotFoundError(f"receipt {args['receipt_id']} not found")
+        return {"receipt": receipt}
+    if action == "revert":
+        receipt = d.get_receipt(int(args["receipt_id"]))
+        if receipt is None:
+            raise NotFoundError(f"receipt {args['receipt_id']} not found")
+        if d.folder_for_path(receipt["path"]) is None:
+            raise OutsideDeskError(f"{receipt['path']} is no longer inside a Desk folder; nothing was changed")
+        return {"receipt": service.revert_receipt(int(args["receipt_id"]), d=d)}
+    raise ValueError(f"unknown action {action!r}")
+
+
+HANDLERS: dict[str, Handler] = {
+    "office_desk": office_desk,
+    "office_inspect": office_inspect,
+    "office_search": office_search,
+    "docx_tracked_edit": docx_tracked_edit,
+    "docx_comment": docx_comment,
+    "docx_redline_accept_reject": docx_redline_accept_reject,
+    "pptx_inspect_formats": pptx_inspect_formats,
+    "pptx_edit_shape": pptx_edit_shape,
+    "pptx_compose_decks": pptx_compose_decks,
+    "pptx_diff": pptx_diff,
+    "xlsx_edit": xlsx_edit,
+    "xlsx_recalc": xlsx_recalc,
+    "xlsx_diff": xlsx_diff,
+    "office_receipt": office_receipt,
+}

@@ -37,10 +37,10 @@ from pptx.errors import (
     UnsupportedStructureError as PptxUnsupportedStructureError,
 )
 
-from .errors import OutsideDeskError, UnsupportedFileError
+from .errors import OfficeError, OutsideDeskError, PolicyRefusal, UnsupportedFileError
 
 _SUPPORTED = {".docx": "docx", ".pptx": "pptx", ".xlsx": "xlsx"}
-_UNSUPPORTED = {".doc", ".ppt", ".xls"}
+OFFICE_SUFFIXES = frozenset(_SUPPORTED)
 
 
 def resolve_path(path: str | os.PathLike[str]) -> Path:
@@ -58,19 +58,23 @@ def require_on_desk(desk, path: str | os.PathLike[str]) -> dict[str, Any]:
 def kind_of(path: str | os.PathLike[str]) -> str:
     resolved = resolve_path(path)
     suffix = resolved.suffix.lower()
-    if suffix == ".xlsm":
-        raise UnsupportedFileError("macro-enabled workbooks are not supported")
     if suffix in _SUPPORTED:
         return _SUPPORTED[suffix]
-    if suffix in _UNSUPPORTED:
-        raise UnsupportedFileError(f"{suffix} files are not supported")
-    raise UnsupportedFileError(f"unsupported file type: {suffix or resolved.name}")
+    raise UnsupportedFileError(f"{suffix or resolved.name} files are not supported; use .docx, .pptx or .xlsx (legacy and macro-enabled formats are refused)")
 
 
-def backup(data_dir: str | os.PathLike[str], ws_id: int, receipt_id: int, path: str | os.PathLike[str]) -> Path:
+def require_kind(path: str | os.PathLike[str], expected: str) -> None:
+    actual = kind_of(path)
+    if actual != expected:
+        raise UnsupportedFileError(f"this tool edits .{expected} files, got .{actual}")
+
+
+def backup(data_dir: str | os.PathLike[str], ws_id: int, path: str | os.PathLike[str]) -> Path:
+    """Copy `path` into a fresh, never-reused directory under the workstream's backups."""
     source = resolve_path(path)
-    backup_dir = Path(data_dir) / "backups" / str(ws_id) / str(receipt_id)
-    backup_dir.mkdir(parents=True, exist_ok=True)
+    root = Path(data_dir) / "backups" / str(ws_id)
+    root.mkdir(parents=True, exist_ok=True)
+    backup_dir = Path(tempfile.mkdtemp(prefix="op-", dir=str(root)))
     target = backup_dir / source.name
     shutil.copy2(source, target)
     return target
@@ -100,14 +104,26 @@ def sha256(path: str | os.PathLike[str]) -> str:
     return digest.hexdigest()
 
 
+_PAPER_REFUSALS = (DocxPaperRefusal, PptxPaperRefusal, XlsxPaperRefusal)
+
+
+def is_refusal(exc: BaseException) -> bool:
+    return isinstance(exc, _PAPER_REFUSALS + (PolicyRefusal,))
+
+
 def refusal_payload(exc: Exception) -> dict[str, Any]:
-    reason = getattr(exc, "reason", exc.__class__.__name__)
-    hint = getattr(exc, "hint", None) or _hint_for_exception(exc)
-    if isinstance(exc, (DocxPaperRefusal, PptxPaperRefusal, XlsxPaperRefusal)):
-        reason = exc.__class__.__name__
-    elif isinstance(exc, (OutsideDeskError, UnsupportedFileError)):
-        reason = exc.reason
-    return {"ok": False, "refused": True, "reason": reason, "message": str(exc), "hint": hint}
+    """Shape any failure as JSON; library and policy refusals are flagged `refused` (file untouched)."""
+    if isinstance(exc, _PAPER_REFUSALS):
+        return {"ok": False, "refused": True, "reason": exc.__class__.__name__, "message": str(exc), "hint": _hint_for_exception(exc)}
+    if isinstance(exc, OfficeError):
+        return {"ok": False, "refused": isinstance(exc, PolicyRefusal), "reason": exc.reason, "message": str(exc), "hint": exc.hint}
+    if isinstance(exc, FileNotFoundError):
+        return {"ok": False, "refused": False, "reason": "not_found", "message": str(exc), "hint": "Check the path; use office_desk list to see desk folders."}
+    if isinstance(exc, KeyError):
+        return {"ok": False, "refused": False, "reason": "bad_request", "message": f"missing argument {exc}", "hint": "Pass every required argument."}
+    if isinstance(exc, (ValueError, TypeError)):
+        return {"ok": False, "refused": False, "reason": "bad_request", "message": str(exc), "hint": "Fix the arguments and retry."}
+    return {"ok": False, "refused": False, "reason": "error", "message": f"{type(exc).__name__}: {exc}", "hint": "Inspect the file and retry with a narrower request."}
 
 
 def _hint_for_exception(exc: Exception) -> str:

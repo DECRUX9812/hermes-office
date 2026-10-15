@@ -3,56 +3,50 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from docx.search import find_text
-from openpyxl import load_workbook
-from pptx.inspect import inspect_text
+from .docx_ops import search_docx
+from .guard import OFFICE_SUFFIXES, kind_of, resolve_path
+from .pptx_ops import search_pptx
+from .xlsx_ops import search_xlsx
 
-from .guard import kind_of, resolve_path
-from .docx_ops import _load as load_docx
-
-
-def _norm(text: str) -> str:
-    return " ".join(text.lower().split())
+MAX_FILES = 200
+MAX_DEPTH = 4
 
 
-def _search_one(path: str | Path, query: str, *, match: str = "exact", regex: bool = False) -> list[dict[str, Any]]:
+def _search_one(path: Path, query: str, *, match: str, regex: bool) -> list[dict[str, Any]]:
     kind = kind_of(path)
     if kind == "docx":
-        doc = load_docx(path)
-        if regex:
-            spans = find_text(doc, query)
-        else:
-            spans = find_text(doc, query, match=match)
-        return [span.to_dict() if hasattr(span, "to_dict") else {"text": getattr(span, "text", query)} for span in spans]
+        return search_docx(path, query, match=match, regex=regex)
     if kind == "pptx":
-        from .pptx_ops import _load as load_pptx
-
-        prs = load_pptx(path)
-        hits = []
-        for slide_index, slide in enumerate(prs.slides):
-            inspection = inspect_text(slide).to_dict()
-            for block in inspection.get("blocks", []):
-                text = block.get("text", "")
-                hay = text if match == "exact" else _norm(text)
-                needle = query if match == "exact" else _norm(query)
-                if (needle in hay) if regex else (needle == hay or needle in hay):
-                    hits.append({"slide": slide_index, "shape": block.get("shape_name"), "text": text})
-        return hits
-    if kind == "xlsx":
-        wb = load_workbook(str(resolve_path(path)))
-        return wb.search(query, regex=regex)
-    raise ValueError(f"unsupported kind: {kind}")
+        return search_pptx(path, query, match=match, regex=regex)
+    return search_xlsx(path, query, regex=regex)
 
 
-def search_path_or_folder(path: str | Path | None = None, folder: str | Path | None = None, *, query: str, match: str = "exact", regex: bool = False) -> list[dict[str, Any]]:
+def office_files(folder: Path, *, max_depth: int = MAX_DEPTH, limit: int = MAX_FILES) -> list[Path]:
+    found: list[Path] = []
+    for child in sorted(folder.rglob("*")):
+        rel = child.relative_to(folder).parts
+        if len(rel) > max_depth or any(part.startswith(".") for part in rel) or child.name.startswith("~$"):
+            continue
+        if child.is_file() and child.suffix.lower() in OFFICE_SUFFIXES:
+            found.append(child)
+            if len(found) >= limit:
+                break
+    return found
+
+
+def search_path_or_folder(path: str | None, folder: str | None, *, query: str, match: str = "exact", regex: bool = False) -> list[dict[str, Any]]:
     target = folder or path
-    if target is None:
-        raise ValueError("path or folder is required")
+    if not target:
+        raise ValueError("give path (one file) or folder")
     resolved = resolve_path(target)
-    if resolved.is_dir():
-        hits = []
-        for child in sorted(resolved.rglob("*")):
-            if child.is_file() and child.suffix.lower() in {".docx", ".pptx", ".xlsx"}:
-                hits.append({"path": str(child), "matches": _search_one(child, query, match=match, regex=regex)})
-        return hits
-    return [{"path": str(resolved), "matches": _search_one(resolved, query, match=match, regex=regex)}]
+    files = office_files(resolved) if resolved.is_dir() else [resolved]
+    results = []
+    for file in files:
+        try:
+            matches = _search_one(file, query, match=match, regex=regex)
+        except Exception as exc:  # one unreadable file must not hide hits in the others
+            results.append({"path": str(file), "error": f"{type(exc).__name__}: {exc}"})
+            continue
+        if matches or not resolved.is_dir():
+            results.append({"path": str(file), "matches": matches})
+    return results

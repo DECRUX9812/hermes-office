@@ -1,113 +1,160 @@
+"""Desk backend routes, mounted by Hermes at /api/plugins/hermes-office/ (dashboard and `hermes serve`)."""
+
 from __future__ import annotations
 
 import importlib.util
-import json
 import sys
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _load_core():
+def _load_core() -> None:
+    # Hermes loads this file by path, so the plugin's own package may not be importable by name.
     try:
-        import hermes_office as core  # type: ignore
-
-        return core
-    except Exception:
-        root = Path(__file__).resolve().parents[1]
-        spec = importlib.util.spec_from_file_location(
-            "hermes_office",
-            root / "hermes_office" / "__init__.py",
-            submodule_search_locations=[str(root / "hermes_office")],
-        )
-        if spec is None or spec.loader is None:
-            raise
-        module = importlib.util.module_from_spec(spec)
-        sys.modules["hermes_office"] = module
-        spec.loader.exec_module(module)
-        return module
+        import hermes_office  # noqa: F401
+        return
+    except ImportError:
+        pass
+    spec = importlib.util.spec_from_file_location("hermes_office", _ROOT / "hermes_office" / "__init__.py", submodule_search_locations=[str(_ROOT / "hermes_office")])
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["hermes_office"] = module
+    spec.loader.exec_module(module)
 
 
-core = _load_core()
-from hermes_office.bridge import conversation, data_dir
-from hermes_office.desk import Desk
-from hermes_office.docx_ops import redline_docx
-from hermes_office.diff_ops import diff_file
-from hermes_office.guard import atomic_write, backup, kind_of, resolve_path, sha256
-from hermes_office.preview import preview_file
+_load_core()
+
+from hermes_office import __version__, bridge, service  # noqa: E402
+from hermes_office.desk import Desk  # noqa: E402
+from hermes_office.diff_ops import diff_file  # noqa: E402
+from hermes_office.errors import OfficeError  # noqa: E402
+from hermes_office.guard import OFFICE_SUFFIXES, kind_of, refusal_payload, resolve_path  # noqa: E402
+from hermes_office.preview import preview_file  # noqa: E402
+from hermes_office.search_ops import office_files  # noqa: E402
+from hermes_office.xlsx_ops import soffice_path  # noqa: E402
 
 router = APIRouter()
 
+STATUSES = {"running", "queued", "needs_you", "done", "error"}
+
+
+class FolderIn(BaseModel):
+    path: str
+
+
+class WorkstreamIn(BaseModel):
+    folder_id: int
+    title: str | None = None
+    request: str
+
+
+class WorkstreamPatch(BaseModel):
+    session_id: str | None = None
+    status: str | None = None
+    note: str | None = None
+    title: str | None = None
+
+
+class RedlineIn(BaseModel):
+    path: str
+    action: str
+    workstream_id: int | None = None
+    author: str | None = None
+
 
 def _desk() -> Desk:
-    return Desk(data_dir())
+    return service.desk()
 
 
-def _file_rows(folder_path: Path) -> list[dict[str, Any]]:
-    rows = []
-    desk = _desk()
-    workstreams = desk.list_workstreams()
-    for child in sorted(folder_path.rglob("*")):
-        if len(child.relative_to(folder_path).parts) > 4:
-            continue
-        if any(part.startswith(".") for part in child.relative_to(folder_path).parts[:-1]):
-            continue
-        if child.is_file() and child.name.startswith("~$"):
-            continue
-        if child.is_file() and child.suffix.lower() in {".docx", ".pptx", ".xlsx"}:
-            count = sum(1 for ws in workstreams if any(file_row["path"] == str(child.resolve()) for file_row in desk.files(ws["id"])))
-            rows.append({"path": str(child), "rel": str(child.relative_to(folder_path)), "kind": kind_of(child), "size": child.stat().st_size, "mtime": child.stat().st_mtime, "workstreams": count})
-        if len(rows) >= 500:
-            break
-    return rows
+def _fail(exc: Exception) -> HTTPException:
+    payload = refusal_payload(exc)
+    status = 404 if payload["reason"] == "not_found" else 409 if payload.get("refused") else 400
+    return HTTPException(status_code=status, detail=f"{payload['message']} {payload.get('hint') or ''}".strip())
+
+
+def _on_desk(d: Desk, path: str) -> Path:
+    resolved = resolve_path(path)
+    if d.folder_for_path(resolved) is None:
+        raise HTTPException(status_code=403, detail=f"{resolved} is not inside a Desk folder")
+    if not resolved.is_file():
+        raise HTTPException(status_code=404, detail=f"{resolved} does not exist")
+    if resolved.suffix.lower() not in OFFICE_SUFFIXES:
+        raise HTTPException(status_code=400, detail="only .docx, .pptx and .xlsx files can be previewed")
+    return resolved
+
+
+def _ws_or_404(d: Desk, ws_id: int) -> dict[str, Any]:
+    ws = d.get_workstream(ws_id)
+    if not ws:
+        raise HTTPException(status_code=404, detail=f"workstream {ws_id} not found")
+    return ws
+
+
+def _rel(d: Desk, path: str) -> str:
+    folder = d.folder_for_path(path)
+    return str(Path(path).relative_to(folder["path"])) if folder else Path(path).name
 
 
 @router.get("/health")
 def health() -> dict[str, Any]:
-    from openpyxl import oracle
+    from hermes_office.plugin import engines_ready
+    import docx, openpyxl, pptx  # noqa: E401
 
     return {
-        "ok": True,
-        "version": "0.1.0",
-        "engines": {
-            "docx": True,
-            "pptx": True,
-            "xlsx": True,
-        },
-        "libreoffice": oracle.find_soffice() is not None,
-        "data_dir": str(data_dir()),
+        "ok": engines_ready(),
+        "version": __version__,
+        "engines": {name: getattr(module, "__paper_version__", None) for name, module in (("docx", docx), ("pptx", pptx), ("xlsx", openpyxl))},
+        "libreoffice": soffice_path() is not None,
+        "data_dir": str(bridge.data_dir()),
     }
 
 
 @router.get("/desk")
 def get_desk() -> dict[str, Any]:
-    desk = _desk()
-    folders = desk.list_folders()
-    return {"folders": folders, "needs_you": [ws for ws in desk.list_workstreams() if ws.get("needs_you")], "recent": desk.list_workstreams()}
+    d = _desk()
+    recent = d.list_workstreams(limit=50)
+    return {"folders": d.list_folders(), "needs_you": [ws for ws in recent if ws.get("needs_you")], "recent": recent}
 
 
 @router.post("/folders")
-def add_folder(payload: dict[str, Any]) -> dict[str, Any]:
-    path = resolve_path(payload["path"])
-    if not path.exists() or not path.is_dir():
-        raise HTTPException(status_code=400, detail="folder does not exist")
+def add_folder(body: FolderIn) -> dict[str, Any]:
+    path = resolve_path(body.path)
+    if not path.is_dir():
+        raise HTTPException(status_code=400, detail=f"{path} is not a folder")
     return _desk().add_folder(path)
 
 
 @router.delete("/folders/{folder_id}")
 def delete_folder(folder_id: int) -> dict[str, Any]:
-    _desk().remove_folder(folder_id)
+    d = _desk()
+    if d.get_folder(folder_id) is None:
+        raise HTTPException(status_code=404, detail=f"folder {folder_id} not found")
+    d.remove_folder(folder_id)
     return {"ok": True}
 
 
 @router.get("/folders/{folder_id}/files")
 def folder_files(folder_id: int) -> list[dict[str, Any]]:
-    desk = _desk()
-    folder = next((item for item in desk.list_folders() if item["id"] == folder_id), None)
+    d = _desk()
+    folder = d.get_folder(folder_id)
     if folder is None:
-        raise HTTPException(status_code=404, detail="folder not found")
-    return _file_rows(Path(folder["path"]))
+        raise HTTPException(status_code=404, detail=f"folder {folder_id} not found")
+    root = Path(folder["path"])
+    if not root.is_dir():
+        raise HTTPException(status_code=410, detail=f"{root} no longer exists")
+    touched: dict[str, int] = {}
+    for ws in d.list_workstreams(folder_id=folder_id, limit=500):
+        for row in d.files(ws["id"]):
+            touched[row["path"]] = touched.get(row["path"], 0) + 1
+    rows = []
+    for file in office_files(root, limit=500):
+        stat = file.stat()
+        rows.append({"path": str(file), "rel": str(file.relative_to(root)), "kind": kind_of(file), "size": stat.st_size, "mtime": stat.st_mtime, "workstreams": touched.get(str(file.resolve()), 0)})
+    return rows
 
 
 @router.get("/folders/{folder_id}/workstreams")
@@ -116,100 +163,112 @@ def folder_workstreams(folder_id: int) -> list[dict[str, Any]]:
 
 
 @router.post("/workstreams")
-def create_workstream(payload: dict[str, Any]) -> dict[str, Any]:
-    desk = _desk()
-    folder_id = int(payload["folder_id"])
-    title = payload["title"]
-    return desk.create_workstream(folder_id, title, request=payload.get("request"), session_id=payload.get("session_id"), status="queued")
+def create_workstream(body: WorkstreamIn) -> dict[str, Any]:
+    d = _desk()
+    if d.get_folder(body.folder_id) is None:
+        raise HTTPException(status_code=404, detail=f"folder {body.folder_id} not found")
+    title = body.title or service._title_from(body.request, "New request")
+    ws = d.create_workstream(body.folder_id, title, request=body.request, status="queued")
+    d.add_event(ws["id"], "status", summary="Request queued", data={"request": body.request})
+    service.notify(ws["id"], "queued")
+    return d.get_workstream(ws["id"])
 
 
-@router.patch("/workstreams/{workstream_id}")
-def patch_workstream(workstream_id: int, payload: dict[str, Any]) -> dict[str, Any]:
-    return _desk().update_workstream(workstream_id, **payload)
+@router.patch("/workstreams/{ws_id}")
+def patch_workstream(ws_id: int, body: WorkstreamPatch) -> dict[str, Any]:
+    d = _desk()
+    _ws_or_404(d, ws_id)
+    fields = body.model_dump(exclude_none=True)
+    if "status" in fields:
+        if fields["status"] not in STATUSES:
+            raise HTTPException(status_code=400, detail=f"status must be one of {sorted(STATUSES)}")
+        fields["needs_you"] = 1 if fields["status"] == "needs_you" else 0
+    ws = d.update_workstream(ws_id, **fields)
+    if "status" in fields:
+        d.add_event(ws_id, "status", summary=f"Status → {fields['status']}", data={})
+    service.notify(ws_id, ws.get("status"))
+    return ws
 
 
-@router.get("/workstreams/{workstream_id}")
-def get_workstream(workstream_id: int) -> dict[str, Any]:
-    desk = _desk()
-    workstream = desk.get_workstream(workstream_id)
-    if workstream is None:
-        raise HTTPException(status_code=404, detail="workstream not found")
-    return {"workstream": workstream, "now": desk.now(workstream_id), "files": desk.files(workstream_id), "events": desk.events(workstream_id), "receipts": desk.list_receipts(workstream_id)}
+@router.get("/workstreams/{ws_id}")
+def get_workstream(ws_id: int) -> dict[str, Any]:
+    d = _desk()
+    ws = _ws_or_404(d, ws_id)
+    files = [{"path": f["path"], "rel": _rel(d, f["path"]), "kind": f["kind"], "state": f["state"], "receipt_id": f["last_receipt_id"], "exists": Path(f["path"]).exists()} for f in d.files(ws_id)]
+    receipts = d.list_receipts(ws_id)
+    return {"workstream": ws, "now": d.now(ws_id) if ws.get("status") == "running" else None, "files": files, "events": d.events(ws_id)[-200:], "receipts": receipts}
 
 
-@router.get("/workstreams/{workstream_id}/conversation")
-def workstream_conversation(workstream_id: int) -> dict[str, Any]:
-    desk = _desk()
-    ws = desk.get_workstream(workstream_id)
-    if ws is None:
-        raise HTTPException(status_code=404, detail="workstream not found")
+@router.get("/workstreams/{ws_id}/conversation")
+def workstream_conversation(ws_id: int) -> dict[str, Any]:
+    ws = _ws_or_404(_desk(), ws_id)
     if not ws.get("session_id"):
-        return {"available": False, "reason": "missing_session_id"}
-    return conversation(ws["session_id"])
+        return {"available": False, "reason": "No Hermes session is attached to this workstream yet.", "messages": []}
+    return bridge.conversation(ws["session_id"])
+
+
+def _baseline(d: Desk, path: Path, receipt_id: int | None) -> dict[str, Any]:
+    receipt = d.get_receipt(receipt_id) if receipt_id is not None else d.first_receipt_for(path)
+    if receipt is None or receipt["path"] != str(path):
+        raise HTTPException(status_code=404, detail=f"no receipt with a backup for {path.name}")
+    if not receipt.get("backup_path") or not Path(receipt["backup_path"]).exists():
+        raise HTTPException(status_code=404, detail=f"{path.name} was created by this workstream; there is no before version")
+    return receipt
 
 
 @router.get("/preview")
-def preview(path: str) -> dict[str, Any]:
-    resolved = resolve_path(path)
-    if not resolved.exists():
-        raise HTTPException(status_code=404, detail="file not found")
-    return preview_file(resolved)
+def preview(path: str, receipt_id: int | None = None) -> dict[str, Any]:
+    d = _desk()
+    resolved = _on_desk(d, path)
+    try:
+        if receipt_id is None:
+            return preview_file(resolved)
+        receipt = _baseline(d, resolved, receipt_id)
+        return {**preview_file(receipt["backup_path"]), "path": str(resolved), "baseline_of": receipt["id"]}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _fail(exc) from exc
 
 
 @router.get("/diff")
 def diff(path: str, receipt_id: int | None = None) -> dict[str, Any]:
-    resolved = resolve_path(path)
-    if not resolved.exists():
-        raise HTTPException(status_code=404, detail="file not found")
-    desk = _desk()
-    receipt = desk.get_receipt(receipt_id) if receipt_id is not None else next((item for item in desk.list_receipts() if item["path"] == str(resolved)), None)
-    if receipt is None:
-        raise HTTPException(status_code=404, detail="receipt not found")
-    baseline = receipt.get("backup_path")
-    if not baseline:
-        raise HTTPException(status_code=400, detail="receipt has no backup")
-    return diff_file(resolved, baseline)
+    d = _desk()
+    resolved = _on_desk(d, path)
+    receipt = _baseline(d, resolved, receipt_id)
+    try:
+        return {**diff_file(resolved, receipt["backup_path"]), "baseline_receipt": receipt["id"]}
+    except Exception as exc:
+        raise _fail(exc) from exc
 
 
 @router.post("/redline")
-def redline(payload: dict[str, Any]) -> dict[str, Any]:
+def redline(body: RedlineIn) -> dict[str, Any]:
+    d = _desk()
+    resolved = _on_desk(d, body.path)
+    if body.action not in ("accept", "reject"):
+        raise HTTPException(status_code=400, detail="action must be accept or reject")
     try:
-        desk = _desk()
-        path = resolve_path(payload["path"])
-        if not path.exists():
-            raise HTTPException(status_code=404, detail="file not found")
-        folder = desk.folder_for_path(path)
-        if folder is None:
-            raise HTTPException(status_code=400, detail="outside desk")
-        ws = desk.create_workstream(folder["id"], "docx_redline_accept_reject", request="redline", session_id=payload.get("session_id"), status="running")
-        before = sha256(path)
-        backup_path = backup(desk.data_dir, ws["id"], "redline", path)
-        result = redline_docx(path, action=payload["action"], author=payload.get("author"), compare_with=payload.get("compare_with"))
-        after = sha256(path)
-        receipt = desk.add_receipt(ws["id"], "docx_redline_accept_reject", path, payload["action"], before, after, backup_path, result)
-        desk.track_file(ws["id"], path, "changed", receipt_id=receipt["id"], kind="docx")
-        return {"ok": True, "resolved": result["resolved"], "receipt": receipt}
-    except HTTPException:
-        raise
+        out = service.resolve_redline(str(resolved), action=body.action, workstream_id=body.workstream_id, author=body.author, scope="author" if body.author else "all", d=d)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise _fail(exc) from exc
+    receipt = d.get_receipt(out["receipt_id"]) if out["receipt_id"] else None
+    return {"ok": True, "resolved": out["result"]["resolved"], "remaining": out["result"]["remaining"], "receipt": receipt}
 
 
 @router.post("/receipts/{receipt_id}/revert")
-def revert_receipt(receipt_id: int) -> dict[str, Any]:
-    desk = _desk()
-    receipt = desk.get_receipt(receipt_id)
+def revert(receipt_id: int) -> dict[str, Any]:
+    d = _desk()
+    receipt = d.get_receipt(receipt_id)
     if receipt is None:
-        raise HTTPException(status_code=404, detail="receipt not found")
-    backup_path = receipt.get("backup_path")
-    if backup_path is None:
-        raise HTTPException(status_code=400, detail="receipt has no backup")
-    target = Path(receipt["path"])
-    revert_backup = backup(desk.data_dir, receipt["workstream_id"], f"revert-{receipt_id}", target)
-    atomic_write(target, lambda tmp: tmp.write_bytes(Path(backup_path).read_bytes()))
-    new_receipt = desk.add_receipt(receipt["workstream_id"], "office_receipt", target, f"revert receipt {receipt_id}", None, None, revert_backup, {"ok": True})
-    desk.mark_reverted(receipt_id)
-    return {"ok": True, "receipt": new_receipt}
+        raise HTTPException(status_code=404, detail=f"receipt {receipt_id} not found")
+    if d.folder_for_path(receipt["path"]) is None:
+        raise HTTPException(status_code=403, detail=f"{receipt['path']} is not inside a Desk folder")
+    try:
+        new = service.revert_receipt(receipt_id, d=d)
+    except (OfficeError, OSError) as exc:
+        raise _fail(exc) from exc
+    return {"ok": True, "receipt": new}
 
 
 @router.get("/events")

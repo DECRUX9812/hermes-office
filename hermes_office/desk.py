@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Iterable
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,7 @@ from uuid import uuid4
 
 
 def _utcnow() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
 def _json(value: Any) -> str:
@@ -34,13 +35,24 @@ class Desk:
         self.backups_dir.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        # The agent process (tools) and the backend process (plugin_api) share this file.
         conn = sqlite3.connect(self.db_path, timeout=5, isolation_level=None)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys=ON")
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA busy_timeout=5000")
-        return conn
+        try:
+            yield conn
+            if conn.in_transaction:
+                conn.commit()
+        except BaseException:
+            if conn.in_transaction:
+                conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def _init_db(self) -> None:
         with self._connect() as conn:
@@ -54,7 +66,7 @@ class Desk:
                 );
                 CREATE TABLE IF NOT EXISTS workstreams (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    folder_id INTEGER REFERENCES folders(id) ON DELETE CASCADE,
+                    folder_id INTEGER REFERENCES folders(id) ON DELETE SET NULL,
                     session_id TEXT,
                     title TEXT NOT NULL,
                     request TEXT,
@@ -105,7 +117,7 @@ class Desk:
         with self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             conn.execute(
-                "INSERT OR REPLACE INTO folders(path, name, added_at) VALUES (?, ?, ?)",
+                "INSERT INTO folders(path, name, added_at) VALUES (?, ?, ?) ON CONFLICT(path) DO NOTHING",
                 (str(resolved), resolved.name, _utcnow()),
             )
             row = conn.execute("SELECT * FROM folders WHERE path = ?", (str(resolved),)).fetchone()
@@ -115,6 +127,11 @@ class Desk:
         with self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             conn.execute("DELETE FROM folders WHERE id = ?", (folder_id,))
+
+    def get_folder(self, folder_id: int) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM folders WHERE id = ?", (folder_id,)).fetchone()
+        return _folder_row(self, row) if row is not None else None
 
     def list_folders(self) -> list[dict[str, Any]]:
         with self._connect() as conn:
@@ -178,7 +195,7 @@ class Desk:
             conn.execute(f"UPDATE workstreams SET {columns} WHERE id = ?", (*allowed.values(), workstream_id))
         return self.get_workstream(workstream_id)
 
-    def list_workstreams(self, folder_id: int | None = None, status: str | None = None) -> list[dict[str, Any]]:
+    def list_workstreams(self, folder_id: int | None = None, status: str | None = None, limit: int = 200) -> list[dict[str, Any]]:
         query = "SELECT * FROM workstreams"
         clauses = []
         params: list[Any] = []
@@ -190,7 +207,8 @@ class Desk:
             params.append(status)
         if clauses:
             query += " WHERE " + " AND ".join(clauses)
-        query += " ORDER BY updated_at DESC, id DESC"
+        query += " ORDER BY updated_at DESC, id DESC LIMIT ?"
+        params.append(limit)
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()
         return [_workstream_row(self, row) for row in rows]
@@ -333,10 +351,20 @@ class Desk:
         if ts:
             query += " WHERE ts > ?"
             params.append(ts)
-        query += " ORDER BY ts ASC, id ASC"
+        query += " ORDER BY id ASC LIMIT 500"
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()
-        return [_dict(row) or {} for row in rows]
+        return [_event_row(row) or {} for row in rows]
+
+    def first_receipt_for(self, path: str | Path, workstream_id: int | None = None) -> dict[str, Any] | None:
+        query = "SELECT * FROM receipts WHERE path = ? AND backup_path IS NOT NULL"
+        params: list[Any] = [str(Path(path).expanduser().resolve())]
+        if workstream_id is not None:
+            query += " AND workstream_id = ?"
+            params.append(workstream_id)
+        with self._connect() as conn:
+            row = conn.execute(query + " ORDER BY id ASC LIMIT 1", params).fetchone()
+        return _receipt_row(row)
 
     def events(self, workstream_id: int) -> list[dict[str, Any]]:
         with self._connect() as conn:
@@ -351,7 +379,7 @@ def _folder_row(desk: Desk, row: sqlite3.Row | None) -> dict[str, Any]:
     folder_id = data["id"]
     with desk._connect() as conn:
         data["counts"] = {
-            "files": conn.execute("SELECT COUNT(*) FROM files WHERE workstream_id IN (SELECT id FROM workstreams WHERE folder_id = ?)", (folder_id,)).fetchone()[0],
+            "files": conn.execute("SELECT COUNT(DISTINCT path) FROM files WHERE workstream_id IN (SELECT id FROM workstreams WHERE folder_id = ?)", (folder_id,)).fetchone()[0],
             "workstreams": conn.execute("SELECT COUNT(*) FROM workstreams WHERE folder_id = ?", (folder_id,)).fetchone()[0],
             "needs_you": conn.execute("SELECT COUNT(*) FROM workstreams WHERE folder_id = ? AND needs_you = 1", (folder_id,)).fetchone()[0],
         }

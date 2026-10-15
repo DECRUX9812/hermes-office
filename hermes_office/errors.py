@@ -7,29 +7,21 @@ class OfficeError(Exception):
 
 
 class PolicyRefusal(OfficeError):
+    """A desk policy said no before the file was touched."""
+
     reason = "policy_refusal"
 
 
 class OutsideDeskError(PolicyRefusal):
     reason = "outside_desk"
-    hint = "Add the folder to the desk first, then retry."
+    hint = "Only files inside a Desk folder can be edited. Ask the user, then office_desk action=add_folder path=<folder>."
 
 
 class UnsupportedFileError(PolicyRefusal):
     reason = "unsupported_file"
-    hint = "Use a .docx, .pptx, or .xlsx file."
-
-
-class MissingFolderError(PolicyRefusal):
-    reason = "missing_folder"
-    hint = "Register the folder before writing to it."
+    hint = "Use a .docx, .pptx or .xlsx file."
 
 
 class NotFoundError(OfficeError):
     reason = "not_found"
-    hint = "Check the target path or search term."
-
-
-class AmbiguousSelectionError(OfficeError):
-    reason = "ambiguous_target"
-    hint = "Narrow the target with nth, story, or a more specific query."
+    hint = "Check the id or path; office_desk action=list shows folders and workstreams."

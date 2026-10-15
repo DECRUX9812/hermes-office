@@ -5,10 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hermes-office"
 version = "0.1.0"
-description = "Hermes office desk plugin."
+description = "Desk-guarded Office tools for Hermes: tracked Word edits, PowerPoint and Excel edits with receipts."
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = { text = "MIT" }
 dependencies = [
   "paper-docx>=0.2.1,<0.3",
   "paper-pptx>=0.2.1,<0.3",
@@ -20,7 +20,6 @@ hermes-office = "hermes_office.plugin:register"
 
 [tool.setuptools]
 packages = ["hermes_office"]
-include-package-data = true
 
 [tool.setuptools.package-data]
 hermes_office = ["skills/office-review/SKILL.md"]
