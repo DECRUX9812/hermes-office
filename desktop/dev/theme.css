@@ -1,0 +1,576 @@
+/* Dev-harness theme: the desk page reads the app's live --ui-*/--dt-* theme
+   variables. This file copies their VALUES (verbatim, except where noted) from
+   apps/desktop/src/styles.css (@layer base :root + :root.dark), from
+   apps/desktop/src/design/tokens.css (radius/ease/duration literals), and the
+   dark `--theme-*` seeds from apps/shared/src/theme-presets.ts `nous`
+   darkColors (normally applied at runtime by themes/context.tsx). Dev-only;
+   hex literals are fine here — check-imports skips desktop/dev/. */
+
+/* design/tokens.css — literals the plugin CSS references by name. */
+:root {
+  --radius-control: 0.375rem;
+  --radius-row: 0.4375rem;
+  --radius-card: 0.625rem;
+  --radius-panel: 0.75rem;
+  --radius-dialog: 0.875rem;
+  --radius-pill: 9999px;
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --dur-instant: 80ms;
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 260ms;
+}
+@layer base {
+  :root {
+    color-scheme: light;
+
+    --theme-foreground: #17171a;
+    --theme-primary: #0053fd;
+    --theme-secondary: color-mix(in srgb, #0053fd 7%, #ffffff);
+    --theme-accent-soft: color-mix(in srgb, #0053fd 10%, #ffffff);
+    --theme-midground: #0053fd;
+    --theme-warm: #cf806d;
+    --theme-background-seed: #f8faff;
+    --theme-sidebar-seed: #f3f7ff;
+    --theme-card-seed: #ffffff;
+    --theme-elevated-seed: #ffffff;
+    --theme-bubble-seed: color-mix(in srgb, #0053fd 6%, #ffffff);
+    --theme-neutral-chrome: #f3f3f3;
+    --theme-neutral-sidebar: #f3f3f3;
+    --theme-neutral-card: #fcfcfc;
+    --theme-mix-text-tertiary: 64%;
+    --theme-mix-text-quaternary: 50%;
+    --theme-mix-chrome: 92%;
+    --theme-mix-sidebar: 100%;
+    --theme-mix-card: 22%;
+    --theme-mix-elevated: 28%;
+    --theme-mix-bubble: 0%;
+    /* Neutral-first chrome: fills, strokes and row states carry only a trace
+       of the accent, so the accent itself stays meaningful (selection, the
+       one primary action, focus) instead of tinting every surface. */
+    --theme-fill-primary-accent-mix: 8%;
+    --theme-fill-secondary-accent-mix: 5%;
+    --theme-fill-tertiary-accent-mix: 3%;
+    --theme-fill-quaternary-accent-mix: 2%;
+    --theme-fill-quinary-accent-mix: 1%;
+    --theme-stroke-primary-accent-mix: 10%;
+    --theme-stroke-secondary-accent-mix: 6%;
+    --theme-stroke-tertiary-accent-mix: 4%;
+    --theme-stroke-quaternary-accent-mix: 2%;
+    --theme-row-hover-accent-mix: 1.5%;
+    --theme-row-active-accent-mix: 5%;
+    --theme-control-hover-accent-mix: 2%;
+    --theme-control-active-accent-mix: 5%;
+
+    --ui-base: var(--theme-foreground);
+    --ui-accent: var(--theme-midground);
+    --ui-accent-secondary: var(--theme-primary);
+    --ui-warm: var(--theme-warm);
+    --ui-red: #cf2d56;
+    --ui-orange: #db704b;
+    --ui-yellow: #c08532;
+    --ui-green: #1f8a65;
+    --ui-cyan: #4c7f8c;
+    --ui-blue: #0053fd;
+    --ui-purple: #9e94d5;
+    --context-usage-system: color-mix(in srgb, var(--ui-base) 55%, transparent);
+    --context-usage-tools: var(--ui-purple);
+    --context-usage-rules: var(--ui-green);
+    --context-usage-skills: var(--ui-yellow);
+    --context-usage-mcp: color-mix(in srgb, var(--ui-red) 72%, var(--ui-purple));
+    --context-usage-subagents: color-mix(in srgb, var(--ui-blue) 70%, var(--ui-cyan));
+    --context-usage-memory: color-mix(in srgb, var(--ui-orange) 80%, var(--ui-yellow));
+    --context-usage-conversation: var(--ui-cyan);
+    /* Landed memory-write tool row — gold → purple, never amber warning. */
+    --tool-memory-legendary-from: color-mix(in srgb, var(--ui-yellow) 72%, #f5d08a);
+    --tool-memory-legendary-mid: color-mix(in srgb, var(--ui-orange) 55%, var(--ui-purple));
+    --tool-memory-legendary-to: color-mix(in srgb, var(--ui-purple) 82%, #c4b5fd);
+    --tool-memory-legendary-icon: color-mix(in srgb, var(--ui-yellow) 55%, var(--ui-purple));
+    --tool-memory-legendary-meta: color-mix(in srgb, var(--ui-purple) 58%, var(--ui-text-tertiary));
+    --tool-memory-legendary-glow: color-mix(in srgb, var(--ui-purple) 38%, transparent);
+    /* Diff add/remove, derived from the semantic palette so every diff surface
+       (tool cards, preview, review pane) tracks the theme's green/red. Only the
+       foregrounds need a dark override — they mix toward the page instead of
+       away from it. */
+    --ui-diff-add-border: var(--ui-green);
+    --ui-diff-add-background: color-mix(in srgb, var(--ui-green) 12%, transparent);
+    --ui-diff-add-foreground: color-mix(in srgb, var(--ui-green) 70%, #000);
+    --ui-diff-remove-border: var(--ui-red);
+    --ui-diff-remove-background: color-mix(in srgb, var(--ui-red) 12%, transparent);
+    --ui-diff-remove-foreground: color-mix(in srgb, var(--ui-red) 70%, #000);
+
+    /* Overlay ladder. DESIGN.md: app-wide surfaces must not compete through
+       ad-hoc z-index literals — pick the rung that describes the surface.
+       Values are deliberately sparse so a one-off can slot between two rungs
+       without a renumber. Local stacking inside a component (a sticky header
+       over its own scroll area) stays on plain `z-10`/`z-20`; these rungs are
+       only for surfaces that float over the app. */
+    --z-modal-backdrop: 120;
+    --z-modal: 130;
+    /* A select/dropdown/popover opened from inside a modal, portaled to body. */
+    --z-modal-popover: 140;
+    /* Must clear any open modal: toasts, tooltips, command-surface backdrops. */
+    --z-over-modal: 200;
+    --z-over-modal-content: 210;
+    --z-switcher-backdrop: 219;
+    --z-switcher: 220;
+    /* Boot and blocking states, in the order they can stack. */
+    --z-connecting: 1200;
+    --z-onboarding: 1300;
+    --z-onboarding-popover: 1310;
+    --z-setup: 1400;
+    --z-crash: 1500;
+    --ui-bg-chrome: color-mix(
+      in srgb,
+      var(--theme-background-seed) var(--theme-mix-chrome),
+      var(--theme-neutral-chrome)
+    );
+    --ui-bg-sidebar: color-mix(
+      in srgb,
+      var(--theme-sidebar-seed) var(--theme-mix-sidebar),
+      var(--theme-neutral-sidebar)
+    );
+    --ui-bg-editor: color-mix(in srgb, var(--theme-card-seed) var(--theme-mix-card), var(--theme-neutral-card));
+    --ui-bg-elevated: color-mix(
+      in srgb,
+      var(--theme-elevated-seed) var(--theme-mix-elevated),
+      var(--theme-neutral-card)
+    );
+    --ui-bg-card: color-mix(in srgb, var(--ui-accent) 4%, color-mix(in srgb, var(--ui-base) 4%, transparent));
+    --ui-bg-input: #fcfcfc;
+    --ui-bg-primary: color-mix(
+      in srgb,
+      var(--ui-accent) var(--theme-fill-primary-accent-mix),
+      color-mix(in srgb, var(--ui-base) 10%, transparent)
+    );
+    --ui-bg-secondary: color-mix(
+      in srgb,
+      var(--ui-accent) var(--theme-fill-secondary-accent-mix),
+      color-mix(in srgb, var(--ui-base) 7%, transparent)
+    );
+    --ui-bg-tertiary: color-mix(
+      in srgb,
+      var(--ui-accent) var(--theme-fill-tertiary-accent-mix),
+      color-mix(in srgb, var(--ui-base) 5%, transparent)
+    );
+    --ui-bg-quaternary: color-mix(
+      in srgb,
+      var(--ui-accent) var(--theme-fill-quaternary-accent-mix),
+      color-mix(in srgb, var(--ui-base) 4%, transparent)
+    );
+    --ui-bg-quinary: color-mix(
+      in srgb,
+      var(--ui-accent) var(--theme-fill-quinary-accent-mix),
+      color-mix(in srgb, var(--ui-base) 3%, transparent)
+    );
+    --ui-row-hover-background: color-mix(
+      in srgb,
+      var(--ui-accent) var(--theme-row-hover-accent-mix),
+      color-mix(in srgb, var(--ui-base) 3%, transparent)
+    );
+    --ui-row-active-background: color-mix(
+      in srgb,
+      var(--ui-accent) var(--theme-row-active-accent-mix),
+      color-mix(in srgb, var(--ui-base) 5%, transparent)
+    );
+    /* Open in a pane, but not the FOCUSED one: the active band at reduced
+       strength, so every session on screen is marked and the one you're in
+       still wins. Mixed from the active token so a theme tunes both at once. */
+    --ui-row-open-background: color-mix(in srgb, var(--ui-row-active-background) 28%, transparent);
+    --ui-control-hover-background: color-mix(
+      in srgb,
+      var(--ui-accent) var(--theme-control-hover-accent-mix),
+      color-mix(in srgb, var(--ui-base) 4%, transparent)
+    );
+    --ui-control-active-background: color-mix(
+      in srgb,
+      var(--ui-accent) var(--theme-control-active-accent-mix),
+      color-mix(in srgb, var(--ui-base) 5%, transparent)
+    );
+    --ui-text-primary: color-mix(in srgb, var(--ui-base) 94%, transparent);
+    --ui-text-secondary: color-mix(in srgb, var(--ui-base) 74%, transparent);
+    /* Muted tiers: share of the foreground, resolved per skin by applyTheme (themes/text-ramp.ts)
+       so faint text clears its contrast floor. Light needs more ink than dark. */
+    --ui-text-tertiary: color-mix(in srgb, var(--ui-base) var(--theme-mix-text-tertiary), transparent);
+    --ui-text-quaternary: color-mix(in srgb, var(--ui-base) var(--theme-mix-text-quaternary), transparent);
+    /* Transcript scaffolding — thinking headers, settled tool runs, the live
+       activity ticker. One colour for all of them (see `ScaffoldRow`), pitched
+       between the secondary and tertiary greys those lines used to pick
+       individually, and dimmed once more by the fade rule below so the prose
+       reading column stays primary. */
+    --conversation-scaffold-text: color-mix(in srgb, var(--ui-base) 64%, transparent);
+    --conversation-scaffold-meta: color-mix(in srgb, var(--ui-base) 44%, transparent);
+    --ui-stroke-primary: color-mix(
+      in srgb,
+      var(--ui-accent) var(--theme-stroke-primary-accent-mix),
+      color-mix(in srgb, var(--ui-base) 10%, transparent)
+    );
+    --ui-stroke-secondary: color-mix(
+      in srgb,
+      var(--ui-accent) var(--theme-stroke-secondary-accent-mix),
+      color-mix(in srgb, var(--ui-base) 7%, transparent)
+    );
+    --ui-stroke-tertiary: color-mix(
+      in srgb,
+      var(--ui-accent) var(--theme-stroke-tertiary-accent-mix),
+      color-mix(in srgb, var(--ui-base) 5%, transparent)
+    );
+    --ui-stroke-quaternary: color-mix(
+      in srgb,
+      var(--ui-accent) var(--theme-stroke-quaternary-accent-mix),
+      color-mix(in srgb, var(--ui-base) 3%, transparent)
+    );
+    --ui-sash-hover-border: color-mix(in srgb, var(--ui-accent) 18%, var(--ui-stroke-tertiary));
+    --ui-sash-hover-background: color-mix(in srgb, var(--ui-accent) 6%, transparent);
+    --ui-surface-background: var(--ui-bg-editor);
+    --ui-sidebar-surface-background: var(--ui-bg-sidebar);
+    --ui-chat-surface-background: var(--ui-bg-chrome);
+    --ui-editor-surface-background: var(--ui-bg-chrome);
+    /* The integrated terminal wears the transcript's background, not the
+       editor's — it reads as part of the conversation surface. Its own token so
+       the two can diverge without dragging the terminal along, and so a skin
+       gets one knob for it. xterm's canvas can't use a var, so the probe in
+       terminal/selection.ts resolves this same name to a concrete rgb. */
+    --ui-terminal-surface-background: var(--ui-chat-surface-background);
+    /* Inline chat widgets (clarify, artifact card) — the card fill in light
+       mode, nudged down in dark so a widget settles into the transcript
+       instead of glowing above it (see the `.dark` override). */
+    --ui-widget-surface-background: var(--ui-bg-editor);
+    --ui-chat-bubble-background: color-mix(
+      in srgb,
+      var(--theme-bubble-seed) var(--theme-mix-bubble),
+      var(--theme-neutral-card)
+    );
+    --ui-chat-bubble-opaque-background: var(--ui-bg-editor);
+    --ui-inline-code-background: color-mix(in srgb, #141414 5%, transparent);
+    --ui-inline-code-foreground: color-mix(in srgb, #141414 88%, transparent);
+    --ui-selection-background: color-mix(in srgb, #ffd24a 55%, transparent);
+
+    --dt-background: var(--ui-bg-chrome);
+    --dt-foreground: var(--ui-text-primary);
+    --dt-card: var(--ui-bg-editor);
+    --dt-card-foreground: var(--ui-text-primary);
+    --dt-muted: var(--ui-bg-tertiary);
+    --dt-muted-foreground: var(--ui-text-tertiary);
+    --dt-popover: color-mix(in srgb, var(--ui-bg-elevated) 96%, transparent);
+    --dt-popover-foreground: var(--ui-text-primary);
+    --dt-primary: var(--theme-primary);
+    --dt-primary-foreground: #fcfcfc;
+    /* Boot-paint fallbacks. themes/context.tsx replaces --dt-primary-solid with
+       the hue deepened until #fcfcfc clears AA on it; until it runs, the raw
+       primary is the closest honest guess. */
+    --dt-primary-solid: var(--theme-primary);
+    --dt-primary-solid-foreground: #fcfcfc;
+    --dt-secondary: var(--theme-secondary);
+    --dt-secondary-foreground: var(--ui-text-secondary);
+    --dt-accent: var(--theme-accent-soft);
+    --dt-accent-foreground: var(--ui-text-primary);
+    --dt-border: var(--ui-stroke-secondary);
+    --dt-input: var(--ui-stroke-primary);
+    /* THE single knob for input-field borders: the resting alpha (% of the ring
+       color). Hover doubles it; focus/open go full. 0% = invisible at rest. */
+    --dt-input-border: 7%;
+    /* Knob for input-field background fill: alpha (% of --dt-card) across all
+       states. 100% = fully opaque, lower = translucent over the blurred chrome. */
+    --dt-input-bg: 0%;
+    /* Classic recessed "inset" — a crisp 1px inner shadow at the TOP edge.
+       :root.dark bumps the alpha since a dark card swallows shadow. Removed on
+       focus (the focus border carries the state). */
+    --dt-input-inset: inset 0 1px 1px color-mix(in srgb, #000 10%, transparent);
+    /* Hovered inactive tab: deepen it AWAY from the lighter active surface, so
+       hover can never be mistaken for selected. Dark mode needs more — black
+       over a dark gutter shows less. */
+    --ui-tab-hover-darken: 2.5%;
+    --dt-ring: var(--ui-stroke-primary);
+    --dt-midground: var(--theme-midground);
+    /* Scrollbars carry no theme colour: the accent-tinted thumb read as a
+       coloured element in the corner of every list. Same lightness as the
+       midground so each theme still gets a thumb that sits right against its
+       own surfaces — chroma 0 is the only thing removed. */
+    --dt-scrollbar-thumb: oklch(from var(--dt-midground) l 0 h);
+    --dt-composer-ring: var(--ui-base);
+    --dt-destructive: #cf2d56;
+    --dt-destructive-foreground: #ffffff;
+    --dt-sidebar-bg: var(--ui-bg-sidebar);
+    --dt-sidebar-border: var(--ui-stroke-secondary);
+    /* `--user-bubble-keep` is the Settings → Appearance → Message Bubble lever
+       (store/user-bubble-transparency.ts): the share of the theme's bubble
+       fill to keep. Unset at the default, so the mix is a no-op and the bubble
+       is the theme's fill exactly as before. The border stays put either way —
+       at full transparency the outline is what still marks your turn. */
+    --dt-user-bubble: color-mix(in srgb, var(--ui-chat-bubble-background) var(--user-bubble-keep, 100%), transparent);
+    --dt-user-bubble-border: var(--ui-stroke-tertiary);
+
+    --dt-font-sans:
+      'Inter', 'Segoe WPC', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif,
+      'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', emoji;
+    /* Key caps always use the native UI face — never theme typography overrides. */
+    --dt-font-kbd: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+    /* JetBrains Mono first — the face we bundle (@font-face above) and the
+       terminal's primary — so code/diff match the terminal on every platform
+       instead of drifting to a system Cascadia Code where it's installed. The
+       extra Linux mono fallbacks preserve Latin Extended glyphs (#61392:
+       Vietnamese and other non-Latin diacritics) as monospace when a theme
+       display font does not cover them. */
+    --dt-font-mono:
+      'JetBrains Mono', 'Cascadia Code', 'Cascadia Mono', 'DejaVu Sans Mono', 'Liberation Mono', 'Noto Sans Mono',
+      'Noto Mono', 'SF Mono', ui-monospace, Menlo, Consolas, monospace, 'Apple Color Emoji', 'Segoe UI Emoji',
+      'Segoe UI Symbol', 'Noto Color Emoji', emoji;
+    --dt-base-size: 1rem;
+    --dt-line-height: 1.5;
+    --dt-letter-spacing: 0;
+    --dt-spacing-mul: 1;
+
+    --radius: 0.75rem;
+    /* Effective value everywhere: the chat backdrop used to force 0.2 onto the
+       root element at runtime (an ungated leva slider default), so this 0.6
+       only ever applied to the windows that don't mount the backdrop. Pinned
+       to the value the app actually renders at. */
+    --radius-scalar: 0.2;
+
+    /* LOOK TOKENS — shape and label treatment, keyed off <html data-look>
+       (store/ui-look.ts). These defaults are the Classic look (the original
+       crisp, square chrome); the Soft block below re-points them. Components
+       read the tokens and never branch on the look. */
+    --control-radius: 2.5px;
+    --control-icon-radius: 4px;
+    --label-size: 0.64rem;
+    --label-weight: 600;
+    --label-transform: uppercase;
+    --label-tracking: 0.16em;
+    --label-color: var(--theme-primary);
+    --label-glyph-display: inline-block;
+    --tab-label-size: 9px;
+    --tab-label-transform: uppercase;
+    --tab-label-tracking: 0.025em;
+    /* Idle status dots hold a row's left edge in Classic; Soft lets an idle
+       row rest (a dot appears only when there is something to say). */
+    --status-idle-opacity: 1;
+    --pane-tab-max-width: 12rem;
+
+    /* Space under last message vs overlay composer — driven by the measured composer DOCK height (see
+       composer/index.tsx), which covers the micro-action strip, the status stack, the composer, and the
+       underside strip in one number.
+       This is the default; each chat surface re-declares the calc against its own measurement (see below). */
+    --thread-last-message-clearance: calc(var(--composer-measured-height) + 2rem);
+
+    --composer-shell-pad-block-end: 0.625rem;
+    --message-text-indent: 0.75rem;
+    --conversation-text-base-size: 0.8125rem;
+    --conversation-tool-base-size: 0.6875rem;
+    --conversation-caption-base-size: 0.75rem;
+    --conversation-base-line-height: 1.125rem;
+    --conversation-caption-base-line-height: 1rem;
+    --conversation-text-font-size: var(--conversation-text-base-size);
+    --conversation-tool-font-size: var(--conversation-tool-base-size);
+    --conversation-caption-font-size: var(--conversation-caption-base-size);
+    --conversation-line-height: var(--conversation-base-line-height);
+    --conversation-caption-line-height: var(--conversation-caption-base-line-height);
+    --conversation-turn-gap: 0.375rem;
+    /* Gap between top-level turn blocks (prose ↔ tools ↔ thinking) — enough air
+       that scaffolding reads as separate from the reply, not crammed into it. */
+    --turn-block-gap: 0.75rem;
+    /* Between adjacent scaffolding, though: a back-to-back run of thinking
+       headers and tool rows is one sequence, not blocks to hold apart. Derived
+       so retuning the block gap carries it along. */
+    --scaffold-block-gap: calc(var(--turn-block-gap) / 3);
+    /* Tight gap between tool rows inside a single action group, so a back-to-back
+       run still reads as one cohesive sequence. */
+    --tool-row-gap: 0.375rem;
+    /* Resting opacity of a disclosure caret — invisible until hover, except
+       where a surface opts into a faint hint of the affordance. */
+    --disclosure-caret-rest: 0;
+    /* Paragraph spacing — vertical gap between prose paragraphs, both inside a
+       markdown block and between consecutive prose parts. Single knob; tweak
+       freely. */
+    --paragraph-gap: 0.7rem;
+    --sticky-human-top: 0.23rem;
+    --file-tree-row-height: 1.375rem;
+
+    /* Reading measure for the transcript and composer (one token, so they
+       share an edge). Full-bleed lines on a wide window ran past 200 characters
+       and made tables span the screen; the revamp target (docs/revamp/mockups)
+       reads at 46rem. Custom CSS can set it back to 100%. */
+    --composer-width: 46rem;
+    --composer-control-size: 1.5rem;
+    --composer-control-primary-size: 1.625rem;
+    --composer-voice-menu-size: 1.25rem;
+    --composer-control-gap: 0.25rem;
+    --composer-row-gap: 0.25rem;
+    --composer-ring-strength: 1;
+    --composer-surface-pad-x: 0.5rem;
+    --composer-surface-pad-y: 0.3125rem;
+    --composer-input-min-height: 1.625rem;
+    --composer-input-max-height: 9.375rem;
+    --composer-input-inline-min-width: 8rem;
+    --composer-fallback-height: 2.75rem;
+    --composer-measured-height: calc(0.5rem + var(--composer-shell-pad-block-end) + var(--composer-fallback-height));
+    --composer-surface-measured-height: var(--composer-fallback-height);
+    --thread-viewport-height: max(
+      0rem,
+      calc(100% - var(--composer-measured-height) + var(--composer-surface-measured-height))
+    );
+    --vsq: min(0.5vh, 0.5vw);
+    /* The inline image preview envelope (#74564): agent-generated image SETS
+       arrive stacked in one message, and the old 34rem x ~16-26rem clamp left
+       each landscape image readable only through a small letterbox (the
+       lightbox existed, but inline inspection was impractical). Width now
+       fills most of the ~44rem message column, and the height floor is the
+       old CAP — every viewport gets at least what only tall windows got
+       before, so a 16:9 landscape frame always spans the full preview width
+       (floor 26.25rem × 16/9 ≥ 40rem). Images are never upscaled: the frame
+       width min() still caps at the natural px size. */
+    --image-preview-max-width: 40rem;
+    --image-preview-height: clamp(26.25rem, calc(var(--vsq) * 140), 40rem);
+
+    --sidebar-width: 14.8125rem;
+    --chat-min-width: 28rem;
+    --titlebar-control-size: 24px;
+    --titlebar-control-height: 24px;
+    --titlebar-icon-size: 13.9px;
+    --sidebar-content-inline-padding: 1rem;
+
+    --sidebar: var(--dt-sidebar-bg);
+    --sidebar-foreground: var(--dt-foreground);
+    --sidebar-primary: var(--dt-primary);
+    --sidebar-primary-foreground: var(--dt-primary-foreground);
+    --sidebar-accent: var(--ui-control-active-background);
+    --sidebar-accent-foreground: var(--dt-accent-foreground);
+    --sidebar-border: var(--dt-sidebar-border);
+    --sidebar-ring: var(--dt-ring);
+    --sidebar-edge-border: color-mix(in srgb, var(--ui-base) 7.5%, transparent);
+    --chrome-action-hover: var(--ui-control-hover-background);
+
+    --midground: var(--dt-midground);
+    --background: var(--dt-background);
+    --foreground: var(--dt-foreground);
+
+    --warm-glow: color-mix(in srgb, var(--ui-warm) 32%, color-mix(in srgb, var(--ui-accent) 6%, transparent));
+    /* `--noise-opacity-mul` is set per-mode by `applyTheme()`. */
+    --noise-opacity-mul: 1;
+    --backdrop-invert-mul: 1;
+  }
+
+  :root.dark {
+    /* Per-mode mix knobs — overridden inline by `applyTheme()` per skin. */
+    --theme-mix-text-tertiary: 54%;
+    --theme-mix-text-quaternary: 36%;
+    --theme-mix-chrome: 74%;
+    --theme-mix-card: 38%;
+    --theme-mix-elevated: 46%;
+    --theme-mix-bubble: 46%;
+    --theme-neutral-chrome: #0d0d0e;
+    --theme-neutral-sidebar: #0a0a0b;
+    --theme-neutral-card: #161618;
+
+    /* Dark-only accent palette overrides. */
+    --ui-red: #e75e78;
+    --ui-green: #55a583;
+    --ui-cyan: #6f9ba6;
+    --ui-diff-add-foreground: color-mix(in srgb, var(--ui-green) 62%, #fff);
+    --ui-diff-remove-foreground: color-mix(in srgb, var(--ui-red) 62%, #fff);
+
+    --sidebar-edge-border: color-mix(in srgb, var(--ui-base) 12%, transparent);
+    --composer-ring-strength: 1.3;
+    --backdrop-invert-mul: 0;
+    /* Dark mode: a dark card needs a stronger black inset to show the recess. */
+    --dt-input-inset: inset 0 1px 1px color-mix(in srgb, #000 38%, transparent);
+    --ui-tab-hover-darken: 6%;
+    /* Dark needs a lighter resting border than light mode. */
+    --dt-input-border: 4%;
+
+    --ui-inline-code-background: color-mix(in srgb, #ffffff 7%, transparent);
+    --ui-inline-code-foreground: color-mix(in srgb, #ffffff 88%, transparent);
+    --ui-selection-background: color-mix(in srgb, #ffd24a 38%, transparent);
+    /* A dark card sits ABOVE the chrome (#161618 over #0d0d0e), so an inline
+       widget wearing the raw card fill reads as a lit panel. Take it down a
+       touch — still clearly a surface, no longer the brightest thing in the
+       transcript. Derived from the card so every skin follows its own seed. */
+    --ui-widget-surface-background: color-mix(in srgb, var(--ui-bg-editor) 88%, #000);
+  }
+
+  /* ── Window glass (Settings → Appearance → Window Translucency: Glass) ──
+}
+
+/* Runtime-applied `nous` dark palette (themes/context.tsx applyTheme): the
+   styles.css :root block carries only the light seeds. */
+:root.dark {
+  color-scheme: dark;
+  --theme-foreground: #e6edf3;
+  --theme-primary: #4a84fe;
+  --theme-secondary: #1d2e4f;
+  --theme-accent-soft: #17243a;
+  --theme-midground: #4a84fe;
+  --theme-warm: #4a84fe;
+  --theme-background-seed: #0d1117;
+  --theme-sidebar-seed: #010409;
+  --theme-card-seed: #010409;
+  --theme-elevated-seed: #161b22;
+  --theme-bubble-seed: #07162c;
+}
+
+/* Styles for the dev shim's SDK stand-ins (sdk-shim.js Button): mirrors the
+   variant + size ladder of src/components/ui/button.tsx on theme tokens. */
+.shim-button {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border: 0;
+  border-radius: var(--control-radius, 2.5px);
+  font: inherit;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--dur-fast, 120ms) var(--ease-standard, ease);
+}
+.shim-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.shim-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ui-accent) 55%, transparent);
+  outline-offset: 1px;
+}
+.shim-button[data-size='xs'],
+.shim-button[data-size='sm'] {
+  padding: 0.125rem 0.5rem;
+  font-size: 0.6875rem;
+}
+.shim-button[data-variant='default'] {
+  background: var(--dt-primary-solid, var(--theme-primary));
+  color: var(--dt-primary-solid-foreground, #ffffff);
+}
+.shim-button[data-variant='default']:not(:disabled):hover {
+  background: color-mix(in srgb, var(--dt-primary-solid, var(--theme-primary)) 88%, var(--ui-base));
+}
+.shim-button[data-variant='secondary'] {
+  background: var(--ui-bg-quaternary);
+  color: var(--ui-text-primary);
+}
+.shim-button[data-variant='outline'] {
+  background: transparent;
+  color: var(--ui-text-primary);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ui-stroke-secondary) 50%, transparent);
+}
+.shim-button[data-variant='ghost'],
+.shim-button[data-variant='link'],
+.shim-button[data-variant='text'] {
+  background: transparent;
+  color: var(--ui-text-secondary);
+}
+.shim-button[data-variant='destructive'] {
+  background: var(--dt-destructive);
+  color: var(--dt-destructive-foreground);
+}
+.shim-button[data-variant='secondary']:not(:disabled):hover,
+.shim-button[data-variant='outline']:not(:disabled):hover,
+.shim-button[data-variant='ghost']:not(:disabled):hover {
+  background: var(--chrome-action-hover);
+}
