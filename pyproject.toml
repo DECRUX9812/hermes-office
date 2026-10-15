@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-office"
+version = "0.1.0"
+description = "Hermes office desk plugin."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = [
+  "paper-docx>=0.2.1,<0.3",
+  "paper-pptx>=0.2.1,<0.3",
+  "paper-xlsx>=0.2.2,<0.3",
+]
+
+[project.entry-points."hermes_agent.plugins"]
+hermes-office = "hermes_office.plugin:register"
+
+[tool.setuptools]
+packages = ["hermes_office"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+hermes_office = ["skills/office-review/SKILL.md"]

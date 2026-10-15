@@ -1,0 +1,22 @@
+name: hermes-office
+version: 0.1.0
+manifest_version: 2
+api_version: 1
+license: MIT
+description: Office desk tools for Hermes.
+provides_tools:
+  - office_desk
+  - office_inspect
+  - office_search
+  - docx_tracked_edit
+  - docx_comment
+  - docx_redline_accept_reject
+  - pptx_inspect_formats
+  - pptx_edit_shape
+  - pptx_compose_decks
+  - pptx_diff
+  - xlsx_edit
+  - xlsx_recalc
+  - xlsx_diff
+  - office_receipt
+tags: [office, docx, pptx, xlsx]
