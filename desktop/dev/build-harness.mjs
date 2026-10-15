@@ -30,7 +30,7 @@ import { $selectedWorkstream } from '../../src/state.js'
 
 const disposers = []
 const ctx = {
-  source: 'plugin:hermes-office',
+  source: 'plugin:office-desk',
   register: contribution => {
     if (contribution.area === sdk.ROUTES_AREA) {
       ctx.page = contribution
@@ -42,7 +42,7 @@ const ctx = {
     return () => disposersFor.forEach(dispose => dispose())
   },
   rest: (path, opts = {}) =>
-    fetch('/api/plugins/hermes-office' + (path.startsWith('/') ? path : '/' + path), {
+    fetch('/api/plugins/office-desk' + (path.startsWith('/') ? path : '/' + path), {
       method: opts.method ?? 'GET',
       headers: opts.body === undefined ? undefined : { 'content-type': 'application/json' },
       body: opts.body === undefined ? undefined : JSON.stringify(opts.body)
@@ -69,14 +69,14 @@ const ctx = {
   storage: {
     get: (key, fallback) => {
       try {
-        const raw = localStorage.getItem('hermes.plugin.hermes-office.' + key)
+        const raw = localStorage.getItem('hermes.plugin.office-desk.' + key)
         return raw === null ? fallback : JSON.parse(raw)
       } catch {
         return fallback
       }
     },
-    set: (key, value) => localStorage.setItem('hermes.plugin.hermes-office.' + key, JSON.stringify(value)),
-    remove: key => localStorage.removeItem('hermes.plugin.hermes-office.' + key)
+    set: (key, value) => localStorage.setItem('hermes.plugin.office-desk.' + key, JSON.stringify(value)),
+    remove: key => localStorage.removeItem('hermes.plugin.office-desk.' + key)
   }
 }
 

@@ -1,4 +1,4 @@
-# hermes-office
+# hermes-office (`office-desk`)
 
 [![CI](https://github.com/DECRUX9812/hermes-office/actions/workflows/ci.yml/badge.svg)](https://github.com/DECRUX9812/hermes-office/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -10,6 +10,8 @@ Excel files**. It gives the agent 14 guarded tools built on Paper Instruments'
 [paper-xlsx](https://github.com/paper-instruments/paper-xlsx). Those libraries give you tracked changes,
 format-preserving edits and honest refusals, so nothing gets done by raw XML surgery. You also get a **Desk** page
 where you watch the work and control it: folders, workstreams, before/after previews, diffs, accept/reject and revert.
+
+The repository is `hermes-office`; the plugin id Hermes uses is **`office-desk`** (`hermes plugins enable office-desk`).
 
 ![The Desk: needs-you queue, folders on the desk, recent workstreams](docs/screenshots/desk-home.png)
 
@@ -37,7 +39,7 @@ hermes-office needs Python ≥ 3.11 and must be installed in the **same Python e
 pip install paper-docx paper-pptx paper-xlsx
 
 # 2. The plugin
-pip install git+https://github.com/DECRUX9812/hermes-office.git@v0.1.0
+pip install git+https://github.com/DECRUX9812/hermes-office.git@v0.1.1
 ```
 
 > [!WARNING]
@@ -51,24 +53,58 @@ Optional: install [LibreOffice](https://www.libreoffice.org/) (`soffice` on `PAT
 
 ### Enable it in Hermes
 
-`pip install` registers the `hermes_agent.plugins` entry point (`hermes-office = hermes_office.plugin:register`).
+`pip install` registers the `hermes_agent.plugins` entry point (`office-desk = hermes_office.plugin:register`).
 Then enable the plugin in `$HERMES_HOME/config.yaml`:
 
 ```yaml
 plugins:
   enabled:
-    - hermes-office
+    - office-desk
 ```
 
 Or, as a directory plugin (useful while developing):
 
 ```bash
-git clone https://github.com/DECRUX9812/hermes-office.git "$HERMES_HOME/plugins/hermes-office"
+git clone https://github.com/DECRUX9812/hermes-office.git "$HERMES_HOME/plugins/office-desk"
 ```
 
 Once the plugin is enabled, `hermes dashboard` and `hermes serve` serve the Desk backend routes at
-`/api/plugins/hermes-office/`. The Desk desktop page is `desktop/plugin.js`. To install it into Hermes Desktop, see
+`/api/plugins/office-desk/`. The Desk desktop page is `desktop/plugin.js`. To install it into Hermes Desktop, see
 [desktop/README.md](desktop/README.md) and [INTEGRATION.md](INTEGRATION.md).
+
+## Settings
+
+office-desk has no settings screen of its own. Its settings are declared in `plugin.yaml` (`config_schema`), and
+Hermes builds the form: in Hermes Desktop open **Settings > Plugins > office-desk** (or click the gear on the
+plugin's row in **Capabilities > Plugins**). Values are stored in `config.yaml` under
+`plugins.entries.office-desk.settings`, so you can also edit them there:
+
+```yaml
+plugins:
+  entries:
+    office-desk:
+      settings:
+        folders: [/path/to/Clients]       # kept on the Desk (default: none)
+        default_author: Legal Team        # author of tracked changes and comments (default: Hermes)
+        recalc_timeout: 120               # seconds xlsx_recalc waits for LibreOffice (default: 120)
+```
+
+| Setting | Type | Default | What it does |
+|---|---|---|---|
+| `folders` | list | `[]` | Absolute folder paths kept on the Desk. Missing or relative paths are skipped with a warning. Folders added from the Desk page stay too. |
+| `default_author` | text | `Hermes` | Author on Word tracked changes, comments and redlines when the agent doesn't name one. |
+| `recalc_timeout` | number | `120` | Seconds `xlsx_recalc` waits for LibreOffice. On timeout the workbook is unchanged. |
+
+The Desk page is a work surface (folders, workstreams, review). It is not a settings page.
+
+## What it touches (disclosure)
+
+- **Files:** reads any Office file the agent points it at; **writes only inside Desk folders**. Every write keeps a
+  byte-exact backup and a receipt in the plugin's own data directory (`$HERMES_HOME/plugin-data/office-desk/`).
+- **Subprocess:** `xlsx_recalc` runs LibreOffice (`soffice`, headless) on a temporary copy of the workbook, if
+  LibreOffice is installed. Nothing else is executed.
+- **Hermes session store:** the Desk page reads a workstream's chat messages (read-only) to show the conversation.
+- **Network:** none. No telemetry, no credentials, no background processes, no self-updates.
 
 ## Usage
 
@@ -116,6 +152,13 @@ automatically. You review each one on the Desk:
   a session.
 - **Receipt**: the record of one change (hashes, backup, library report). It can be reverted.
 - **Needs you**: a workstream that has tracked changes to review or a refused edit.
+
+## Upgrading from v0.1.0
+
+v0.1.0 used the plugin id `hermes-office`, which another catalog plugin already uses. From v0.1.1 the id is
+`office-desk`: enable `office-desk` instead of `hermes-office` in `config.yaml` (and, for a directory install,
+rename `$HERMES_HOME/plugins/hermes-office` to `office-desk`). An existing Desk in `plugin-data/hermes-office` keeps
+working where it is.
 
 ## Development
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hermes-office"
-version = "0.1.0"
+version = "0.1.1"
 description = "Desk-guarded Office tools for Hermes: tracked Word edits, PowerPoint and Excel edits with receipts."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -29,7 +29,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "fastapi>=0.110", "httpx>=0.27"]
+dev = ["pytest>=8", "fastapi>=0.110", "httpx>=0.27", "pyyaml>=6,<7"]
 
 [project.urls]
 Homepage = "https://github.com/DECRUX9812/hermes-office"
@@ -38,7 +38,7 @@ Issues = "https://github.com/DECRUX9812/hermes-office/issues"
 Changelog = "https://github.com/DECRUX9812/hermes-office/releases"
 
 [project.entry-points."hermes_agent.plugins"]
-hermes-office = "hermes_office.plugin:register"
+office-desk = "hermes_office.plugin:register"
 
 [tool.setuptools]
 packages = ["hermes_office"]

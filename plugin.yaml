@@ -1,11 +1,14 @@
-name: hermes-office
-version: 0.1.0
+name: office-desk
+version: 0.1.1
 manifest_version: 2
+api_version: 1
 description: >-
   A Desk for Office work: tracked Word edits, PowerPoint shape edits and deck
   composition, Excel edits with receipts and LibreOffice recalc — all guarded,
   backed up and reviewable from the Desk page.
+author: DECRUX9812
 license: MIT
+homepage: https://github.com/DECRUX9812/hermes-office
 provides_tools:
   - office_desk
   - office_inspect
@@ -21,8 +24,30 @@ provides_tools:
   - xlsx_recalc
   - xlsx_diff
   - office_receipt
+provides_hooks:
+  - pre_llm_call
+  - post_llm_call
 python_dependencies:
   - paper-docx>=0.2.1,<0.3
   - paper-pptx>=0.2.1,<0.3
   - paper-xlsx>=0.2.2,<0.3
 tags: [office, docx, pptx, xlsx, word, excel, powerpoint]
+# Settings live in Hermes Desktop under Settings > Plugins > office-desk (the gear on the
+# plugin's row in Capabilities > Plugins opens it). Hermes builds the form from this schema
+# and stores the values under plugins.entries.office-desk.settings in config.yaml.
+config_schema:
+  folders:
+    type: list
+    default: []
+    label: "Desk folders"
+    description: "Absolute paths of folders to keep on the Desk. The agent may only edit files inside a Desk folder. Folders you add from the Desk page are kept as well."
+  default_author:
+    type: str
+    default: "Hermes"
+    label: "Tracked-change author"
+    description: "Author name on Word tracked changes, comments and redlines when the agent does not give one."
+  recalc_timeout:
+    type: int
+    default: 120
+    label: "LibreOffice recalc timeout (seconds)"
+    description: "How long xlsx_recalc waits for LibreOffice before giving up. The workbook is left unchanged on timeout."

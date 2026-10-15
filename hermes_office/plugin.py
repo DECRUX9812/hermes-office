@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from . import service
+from . import service, settings
 from .schemas import ALL_SCHEMAS
 from .tools import HANDLERS
 
@@ -46,6 +46,7 @@ def _on_turn_end(session_id: str = "", **_: Any) -> None:
 
 
 def register(ctx) -> None:
+    settings.bind(ctx)
     for name, handler in HANDLERS.items():
         ctx.register_tool(name=name, toolset=TOOLSET, schema=ALL_SCHEMAS[name], handler=handler, check_fn=engines_ready, emoji="🗂️")
     ctx.register_skill("office-review", SKILL_DIR / "SKILL.md", description="Review and edit Word, PowerPoint and Excel files on the Desk with tracked changes and receipts.")

@@ -8,7 +8,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-PLUGIN_ID = "hermes-office"
+PLUGIN_ID = "office-desk"
+# v0.1.0 used this id; an existing Desk there is kept in place (receipts point at its backups).
+LEGACY_ID = "hermes-office"
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +20,13 @@ def data_dir() -> Path:
         from plugins.plugin_storage import plugin_data_dir
     except ImportError:
         home = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes").expanduser()
-        return home / "plugin-data" / PLUGIN_ID
-    return Path(plugin_data_dir(PLUGIN_ID))
+        current = home / "plugin-data" / PLUGIN_ID
+    else:
+        current = Path(plugin_data_dir(PLUGIN_ID))
+    legacy = current.parent / LEGACY_ID
+    if not (current / "desk.db").exists() and (legacy / "desk.db").exists():
+        return legacy
+    return current
 
 
 def emit(event: str, payload: dict[str, Any]) -> None:
@@ -31,7 +38,7 @@ def emit(event: str, payload: dict[str, Any]) -> None:
     try:
         broadcast_plugin_event(PLUGIN_ID, event, payload)
     except Exception:  # live push is best-effort; the Desk also polls
-        logger.debug("hermes-office event push failed", exc_info=True)
+        logger.debug("office-desk event push failed", exc_info=True)
 
 
 def _message_text(content: Any) -> str:

@@ -59,7 +59,7 @@ DOCX_TRACKED_EDIT_SCHEMA = _schema(
         "replace": {"type": "string", "description": "New text."},
         "nth": {"type": "integer", "description": "0-based occurrence when find appears more than once."},
         "match": {"type": "string", "enum": ["exact", "normalized"]},
-        "author": {"type": "string", "description": "Revision author shown in Word (default Hermes)."},
+        "author": {"type": "string", "description": "Revision author shown in Word (default: the plugin setting Tracked-change author, Hermes unless changed)."},
         "workstream_id": _WS,
     },
     ["path", "find", "replace"],

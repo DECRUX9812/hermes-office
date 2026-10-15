@@ -1,8 +1,8 @@
-// The plugin's own backend namespace (`/api/plugins/hermes-office`), reached only
+// The plugin's own backend namespace (`/api/plugins/office-desk`), reached only
 // through the `ctx.rest` / `ctx.os` doors handed to register(). Components read
 // them from here because a route render has no `ctx` in reach.
 
-export const KEY = 'hermes-office'
+export const KEY = 'office-desk'
 
 const bound = { rest: null, os: null }
 

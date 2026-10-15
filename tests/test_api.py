@@ -18,18 +18,18 @@ def client(hermes_home) -> TestClient:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     app = FastAPI()
-    app.include_router(module.router, prefix="/api/plugins/hermes-office")
+    app.include_router(module.router, prefix="/api/plugins/office-desk")
     return TestClient(app)
 
 
-API = "/api/plugins/hermes-office"
+API = "/api/plugins/office-desk"
 
 
 def test_health(client) -> None:
     body = client.get(f"{API}/health").json()
     assert body["ok"] is True
     assert body["engines"]["docx"] and body["engines"]["pptx"] and body["engines"]["xlsx"]
-    assert body["data_dir"].endswith("plugin-data/hermes-office")
+    assert body["data_dir"].endswith("plugin-data/office-desk")
 
 
 def test_folders_files_and_desk(client, files, tmp_path) -> None:

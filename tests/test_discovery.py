@@ -33,12 +33,12 @@ def _venv() -> Path:
 
 @pytest.fixture
 def venv_home(tmp_path: Path) -> Path:
-    """An isolated HERMES_HOME with hermes-office installed as a directory plugin and enabled."""
+    """An isolated HERMES_HOME with office-desk installed as a directory plugin and enabled."""
     home = tmp_path / "hermes-home"
-    plugins = home / "plugins" / "hermes-office"
+    plugins = home / "plugins" / "office-desk"
     plugins.parent.mkdir(parents=True)
     shutil.copytree(REPO, plugins, ignore=shutil.ignore_patterns(".git", ".task", "tests", "__pycache__", "desktop"))
-    (home / "config.yaml").write_text("plugins:\n  enabled:\n    - hermes-office\n", encoding="utf-8")
+    (home / "config.yaml").write_text("plugins:\n  enabled:\n    - office-desk\n", encoding="utf-8")
     return home
 
 
@@ -55,7 +55,7 @@ import json
 from hermes_cli.plugins import discover_plugins, get_plugin_manager
 discover_plugins(force=True)
 manager = get_plugin_manager()
-plugin = manager._plugins.get("hermes-office")
+plugin = manager._plugins.get("office-desk")
 from tools.registry import registry
 names = ["office_desk", "office_inspect", "office_search", "docx_tracked_edit", "docx_comment",
          "docx_redline_accept_reject", "pptx_inspect_formats", "pptx_edit_shape", "pptx_compose_decks",
@@ -64,7 +64,7 @@ missing = [name for name in names if registry.get_entry(name) is None]
 print("RESULT:" + json.dumps({
     "plugin_error": getattr(plugin, "error", None),
     "missing_tools": missing,
-    "skill": manager.list_plugin_skills("hermes-office"),
+    "skill": manager.list_plugin_skills("office-desk"),
 }))
 """
     result = _run(venv_home, script)

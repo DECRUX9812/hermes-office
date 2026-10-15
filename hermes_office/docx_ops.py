@@ -10,6 +10,7 @@ from docx.errors import TargetNotFoundError
 from docx.package import compare, patch_save
 from docx.search import find_one, find_text
 
+from . import settings
 from .guard import resolve_path
 
 DEFAULT_AUTHOR = "Hermes"
@@ -92,7 +93,7 @@ def tracked_edit_docx(
 ) -> dict[str, Any]:
     document = _load(path)
     span = find_one(document, find, nth=nth, match=match)
-    result = span.replace(replace, tracked=True, author=author or DEFAULT_AUTHOR)
+    result = span.replace(replace, tracked=True, author=author or settings.default_author())
     save = _save_in_place(path, document)
     return {"replace": result.to_dict(), "revisions": len(_load(path).revisions), "save": save}
 
@@ -108,7 +109,7 @@ def comment_docx(
     resolve_id: int | None = None,
 ) -> dict[str, Any]:
     document = _load(path)
-    author = author or DEFAULT_AUTHOR
+    author = author or settings.default_author()
     by_id = {comment.comment_id: comment for comment in document.comments}
     done: dict[str, Any] = {}
     if resolve_id is not None:
@@ -162,7 +163,7 @@ def resolve_revisions_docx(
 
 
 def redline_docx(original: str | Path, revised: str | Path, output_path: str | Path, *, author: str | None = None) -> dict[str, Any]:
-    result = compare(str(resolve_path(original)), str(resolve_path(revised)), author=author or DEFAULT_AUTHOR)
+    result = compare(str(resolve_path(original)), str(resolve_path(revised)), author=author or settings.default_author())
     out = resolve_path(output_path)
     # The redline is the original package plus tracked changes, so patch against the original.
     patch_save(str(resolve_path(original)), result.document, str(out))

@@ -33,7 +33,7 @@ jobs:
         run: |
           python - <<'PY'
           from importlib.metadata import entry_points
-          (ep,) = [e for e in entry_points(group="hermes_agent.plugins") if e.name == "hermes-office"]
+          (ep,) = [e for e in entry_points(group="hermes_agent.plugins") if e.name == "office-desk"]
           assert callable(ep.load()), ep
           print("entry point ok:", ep.value)
           PY

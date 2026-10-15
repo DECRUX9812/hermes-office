@@ -10,6 +10,7 @@ from openpyxl import load_workbook, oracle
 from openpyxl.errors import TargetNotFoundError
 from openpyxl.preserve import diff_workbooks, scan_errors
 
+from . import settings
 from .guard import resolve_path
 
 PREVIEW_ROWS = 60
@@ -107,7 +108,7 @@ def soffice_path() -> str | None:
     return oracle.find_soffice()
 
 
-def recalc_xlsx(path: str | Path, *, read: list[str] | None = None, timeout: float = 120.0) -> dict[str, Any]:
+def recalc_xlsx(path: str | Path, *, read: list[str] | None = None, timeout: float | None = None) -> dict[str, Any]:
     """Recalculate through LibreOffice into a candidate, then swap it in. Never claims success without LibreOffice."""
     target = resolve_path(path)
     read = list(read or [])
@@ -122,7 +123,7 @@ def recalc_xlsx(path: str | Path, *, read: list[str] | None = None, timeout: flo
     workdir = Path(tempfile.mkdtemp(prefix=".hermes-office-recalc-", dir=str(target.parent)))
     try:
         candidate = workdir / target.name
-        result = oracle.recalc(str(target), output_path=str(candidate), timeout=timeout)
+        result = oracle.recalc(str(target), output_path=str(candidate), timeout=timeout if timeout is not None else settings.recalc_timeout())
         os.replace(candidate, target)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)

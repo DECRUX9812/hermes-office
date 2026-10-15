@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
-from . import bridge
+from . import bridge, settings
 from .desk import Desk
 from .docx_ops import resolve_revisions_docx
 from .errors import NotFoundError, OutsideDeskError
@@ -44,7 +44,13 @@ def _turn_message(session_id: str | None) -> str | None:
 
 
 def desk() -> Desk:
-    return Desk(bridge.data_dir())
+    d = Desk(bridge.data_dir())
+    try:
+        settings.sync_folders(d)
+    except Exception:  # a bad settings entry must never take the Desk down
+        import logging
+        logging.getLogger(__name__).warning("office-desk: could not add configured Desk folders", exc_info=True)
+    return d
 
 
 def notify(ws_id: int, status: str | None = None) -> None:

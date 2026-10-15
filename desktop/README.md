@@ -4,7 +4,7 @@
 `/desk` page (plus a sidebar nav row) in the native Hermes Desktop app. It is
 plain ESM, imports only `@hermes/plugin-sdk`, `react` and `react/jsx-runtime`,
 and talks to the plugin's backend (`dashboard/plugin_api.py`, mounted at
-`/api/plugins/hermes-office`) through `ctx.rest`.
+`/api/plugins/office-desk`) through `ctx.rest`.
 
 ## Layout
 
@@ -37,13 +37,13 @@ Copy (or symlink) the built file into the app's disk-plugin folder; the folder
 name must equal the plugin id:
 
 ```bash
-mkdir -p "$HERMES_HOME/desktop-plugins/hermes-office"
-cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/hermes-office/plugin.js"
+mkdir -p "$HERMES_HOME/desktop-plugins/office-desk"
+cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/office-desk/plugin.js"
 ```
 
 The app hot-reloads on save (⌘K → “Reload desktop plugins” if it does not).
 When hermes-office is installed as a unified package
-(`$HERMES_HOME/plugins/hermes-office/`), the app copies `desktop/plugin.js`
+(`$HERMES_HOME/plugins/office-desk/`), the app copies `desktop/plugin.js`
 into `desktop-plugins/` itself.
 
 The page degrades honestly when the Python backend is not in
@@ -58,7 +58,7 @@ python desktop/dev/serve.py --repo . --port 9341   # needs fastapi + uvicorn
 ```
 
 Then open `http://127.0.0.1:9341/` (`?dark` for dark mode). `serve.py` mounts
-`<repo>/dashboard/plugin_api.py` at `/api/plugins/hermes-office` and serves
+`<repo>/dashboard/plugin_api.py` at `/api/plugins/office-desk` and serves
 `dev/` statically. The harness shim (`dev/sdk-shim.js`) implements only the SDK
 exports the plugin imports; `host.request` rejects with "no Hermes gateway in
 the dev harness", so "New request" creates the workstream and honestly reports

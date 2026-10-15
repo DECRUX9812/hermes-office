@@ -41,7 +41,7 @@ def run_proof() -> dict:
     tmp_dir = Path(tempfile.mkdtemp(prefix="office-proof-"))
     try:
         hermes_home = tmp_dir / "hermes_home"
-        plugin_dir = hermes_home / "plugins" / "hermes-office"
+        plugin_dir = hermes_home / "plugins" / "office-desk"
         plugin_dir.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(
             REPO,
@@ -49,7 +49,7 @@ def run_proof() -> dict:
             ignore=shutil.ignore_patterns(".git", ".task", "tests", "__pycache__", "desktop"),
         )
         (hermes_home / "config.yaml").write_text(
-            "plugins:\n  enabled:\n    - hermes-office\n",
+            "plugins:\n  enabled:\n    - office-desk\n",
             encoding="utf-8",
         )
 

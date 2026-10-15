@@ -1,4 +1,4 @@
-"""Desk backend routes, mounted by Hermes at /api/plugins/hermes-office/ (dashboard and `hermes serve`)."""
+"""Desk backend routes, mounted by Hermes at /api/plugins/office-desk/ (dashboard and `hermes serve`)."""
 
 from __future__ import annotations
 

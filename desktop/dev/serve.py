@@ -2,7 +2,7 @@
 """Dev harness server for the Desk desktop page.
 
 Serves desktop/dev/ static files at / and mounts the REAL backend router from
-<repo>/dashboard/plugin_api.py at /api/plugins/hermes-office, so the built
+<repo>/dashboard/plugin_api.py at /api/plugins/office-desk, so the built
 plugin.js renders in a plain browser against real data. HERMES_HOME comes from
 the environment (the plugin's data dir derives from it).
 
@@ -60,7 +60,7 @@ def main() -> None:
         raise SystemExit("set HERMES_HOME (a temp dir, never ~/.hermes) before running the harness")
 
     app = FastAPI(title="hermes-office desk dev harness")
-    app.include_router(load_router(args.repo.resolve()), prefix="/api/plugins/hermes-office")
+    app.include_router(load_router(args.repo.resolve()), prefix="/api/plugins/office-desk")
 
     dist = DEV_DIR / "dist"
     if not (dist / "harness.js").is_file():

@@ -4,7 +4,7 @@
 import { host as host4, queryClient, ROUTES_AREA, SIDEBAR_NAV_AREA, useValue } from "@hermes/plugin-sdk";
 
 // desktop/src/api.js
-var KEY = "hermes-office";
+var KEY = "office-desk";
 var bound = { rest: null, os: null };
 function bindContext(ctx) {
   bound.rest = ctx.rest;
@@ -1161,13 +1161,13 @@ function WorkstreamView({ id }) {
 
 // desktop/src/plugin.jsx
 import { jsx as jsx5 } from "react/jsx-runtime";
-var WORKSTREAM_UPDATED = "plugin.hermes-office.workstream.updated";
+var WORKSTREAM_UPDATED = "plugin.office-desk.workstream.updated";
 function DeskPage() {
   const selected = useValue($selectedWorkstream);
   return selected === null ? /* @__PURE__ */ jsx5(DeskHome, {}) : /* @__PURE__ */ jsx5(WorkstreamView, { id: selected }, selected);
 }
 var plugin_default = {
-  id: "hermes-office",
+  id: "office-desk",
   name: "Desk",
   description: "Office work on your folders: Word, Excel and PowerPoint edits with tracked changes, previews and receipts.",
   register(ctx) {

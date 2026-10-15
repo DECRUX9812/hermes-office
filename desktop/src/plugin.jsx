@@ -6,9 +6,9 @@ import { $selectedWorkstream } from './state'
 import { injectStyle } from './styles'
 import { WorkstreamView } from './workstream'
 
-// broadcast_plugin_event("hermes-office", "workstream.updated", ...) arrives
+// broadcast_plugin_event("office-desk", "workstream.updated", ...) arrives
 // on the gateway stream under this wire name.
-const WORKSTREAM_UPDATED = 'plugin.hermes-office.workstream.updated'
+const WORKSTREAM_UPDATED = 'plugin.office-desk.workstream.updated'
 
 function DeskPage() {
   const selected = useValue($selectedWorkstream)
@@ -17,7 +17,7 @@ function DeskPage() {
 }
 
 export default {
-  id: 'hermes-office',
+  id: 'office-desk',
   name: 'Desk',
   description: 'Office work on your folders: Word, Excel and PowerPoint edits with tracked changes, previews and receipts.',
   register(ctx) {

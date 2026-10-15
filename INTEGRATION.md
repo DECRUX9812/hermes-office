@@ -25,7 +25,7 @@ This document describes how to integrate the **Desk** plugin page from `hermes-o
                                        ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    Hermes Agent Core                        │
-│  Mounted API Router: /api/plugins/hermes-office/*           │
+│  Mounted API Router: /api/plugins/office-desk/*           │
 │  Desk Engine: DeskState · Workstreams · Guard · Receipts    │
 │  Paper Office: paper-docx · paper-xlsx · paper-pptx         │
 └─────────────────────────────────────────────────────────────┘
@@ -40,20 +40,20 @@ The desktop frontend is compiled into a single standard ES module at `desktop/pl
 ### A. Automatic Plugin Discovery (Recommended)
 Hermes Desktop automatically scans `<HERMES_HOME>/desktop-plugins/` for desktop plugin packages.
 
-1. Ensure `hermes-office` backend plugin is installed and enabled in `$HERMES_HOME/config.yaml`:
+1. Ensure the `office-desk` backend plugin (repo `hermes-office`) is installed and enabled in `$HERMES_HOME/config.yaml`:
    ```yaml
    plugins:
      enabled:
-       - hermes-office
+       - office-desk
    ```
 
 2. Symlink or copy the compiled plugin folder into the desktop plugins directory:
    ```bash
-   mkdir -p "$HERMES_HOME/desktop-plugins/hermes-office"
-   cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/hermes-office/"
+   mkdir -p "$HERMES_HOME/desktop-plugins/office-desk"
+   cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/office-desk/"
    ```
 
-3. When Hermes Desktop launches, the `runtime-loader` discovers `hermes-office`:
+3. When Hermes Desktop launches, the `runtime-loader` discovers `office-desk`:
    - It invokes `plugin.register(ctx)`.
    - `Desk` is mounted at route `/desk` (`ROUTES_AREA`).
    - A briefcase icon (`codicon: 'briefcase'`) appears in the persistent sidebar rail (`SIDEBAR_NAV_AREA`).
@@ -61,10 +61,10 @@ Hermes Desktop automatically scans `<HERMES_HOME>/desktop-plugins/` for desktop 
 
 ### B. Static In-Tree Vendor Drop-in (Alternative)
 If you wish to vendor the Desk plugin directly into a Hermes Desktop checkout:
-1. Copy `desktop/src/` into `apps/desktop/src/plugins/hermes-office/`.
+1. Copy `desktop/src/` into `apps/desktop/src/plugins/office-desk/`.
 2. In `apps/desktop/src/plugins/registry.ts`, register the entry point:
    ```typescript
-   import deskPlugin from './hermes-office/plugin';
+   import deskPlugin from './office-desk/plugin';
    // Register alongside built-in plugins
    registerPlugin(deskPlugin);
    ```
@@ -83,7 +83,7 @@ For distributions that ship Hermes Desktop with add-on plugins:
    In your distribution manifest or setup script, ensure `hermes-office` is installed in the python environment:
    ```bash
    pip install paper-docx paper-pptx paper-xlsx
-   pip install git+https://github.com/DECRUX9812/hermes-office.git@v0.1.0
+   pip install git+https://github.com/DECRUX9812/hermes-office.git@v0.1.1
    ```
    Or install editable for active development:
    ```bash
@@ -93,7 +93,7 @@ For distributions that ship Hermes Desktop with add-on plugins:
 2. **Bundle Desktop Assets:**
    During the distribution's packaging step:
    ```bash
-   ADDON_DEST="$HERMES_HOME/desktop-plugins/hermes-office"
+   ADDON_DEST="$HERMES_HOME/desktop-plugins/office-desk"
    mkdir -p "$ADDON_DEST"
    cp desktop/plugin.js "$ADDON_DEST/"
    ```
@@ -121,7 +121,7 @@ The Desk plugin strictly adheres to the Hermes Desktop design standard (`apps/de
    - Adapts automatically to Light, Dark, and High-Contrast themes.
 
 3. **Zero Mocks:**
-   - No mock data or simulated state. All data loads from the live API endpoints (`/api/plugins/hermes-office/*`), reflecting real filesystem changes, backups, and edit receipts.
+   - No mock data or simulated state. All data loads from the live API endpoints (`/api/plugins/office-desk/*`), reflecting real filesystem changes, backups, and edit receipts.
 
 ---
 
