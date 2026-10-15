@@ -22,10 +22,12 @@ and talks to the plugin's backend (`dashboard/plugin_api.py`, mounted at
 ## Build and check
 
 There is no local `node_modules`; esbuild is borrowed read-only from a Hermes
-checkout (`HERMES_ESBUILD` overrides the path):
+Desktop checkout (`HERMES_NODE_MODULES=<checkout>/node_modules`, or
+`HERMES_ESBUILD` for the esbuild path alone):
 
 ```bash
-flock /tmp/hermes-build.lock node desktop/build.mjs
+export HERMES_NODE_MODULES=/path/to/hermes-desktop/node_modules
+node desktop/build.mjs
 node desktop/check-imports.mjs
 ```
 
@@ -50,9 +52,9 @@ The page degrades honestly when the Python backend is not in
 ## Dev harness (against the real backend)
 
 ```bash
-flock /tmp/hermes-build.lock node desktop/dev/build-harness.mjs   # → dev/dist/harness.js (gitignored)
+node desktop/dev/build-harness.mjs                      # → dev/dist/harness.js (gitignored)
 export HERMES_HOME=$(mktemp -d)                                   # never ~/.hermes
-~/Code/ship-test/office-venv/.venv/bin/python desktop/dev/serve.py --repo <path to plugin repo> --port 9341
+python desktop/dev/serve.py --repo . --port 9341   # needs fastapi + uvicorn
 ```
 
 Then open `http://127.0.0.1:9341/` (`?dark` for dark mode). `serve.py` mounts

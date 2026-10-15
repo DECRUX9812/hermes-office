@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,12 +8,34 @@ version = "0.1.0"
 description = "Desk-guarded Office tools for Hermes: tracked Word edits, PowerPoint and Excel edits with receipts."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "DECRUX9812" }]
+keywords = ["hermes", "hermes-agent", "plugin", "docx", "pptx", "xlsx", "office", "word", "excel", "powerpoint", "tracked-changes"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Office/Business :: Office Suites",
+]
 dependencies = [
   "paper-docx>=0.2.1,<0.3",
   "paper-pptx>=0.2.1,<0.3",
   "paper-xlsx>=0.2.2,<0.3",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.urls]
+Homepage = "https://github.com/DECRUX9812/hermes-office"
+Repository = "https://github.com/DECRUX9812/hermes-office"
+Issues = "https://github.com/DECRUX9812/hermes-office/issues"
+Changelog = "https://github.com/DECRUX9812/hermes-office/releases"
 
 [project.entry-points."hermes_agent.plugins"]
 hermes-office = "hermes_office.plugin:register"
@@ -23,3 +45,6 @@ packages = ["hermes_office"]
 
 [tool.setuptools.package-data]
 hermes_office = ["skills/office-review/SKILL.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,27 +1,94 @@
 # hermes-office
 
-A Desk for Office work in [Hermes](https://github.com/NousResearch/hermes-agent). The agent gets
-14 guarded tools for Word, PowerPoint and Excel files; the user gets a Desk page (folders,
-workstreams, previews, diffs, accept/reject, revert) to watch and control that work.
+[![CI](https://github.com/DECRUX9812/hermes-office/actions/workflows/ci.yml/badge.svg)](https://github.com/DECRUX9812/hermes-office/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Built on the Paper Instruments forks — [paper-docx](https://pypi.org/project/paper-docx/),
-[paper-pptx](https://pypi.org/project/paper-pptx/), [paper-xlsx](https://pypi.org/project/paper-xlsx/)
-(all MIT) — which provide tracked changes, format-preserving edits and honest refusals instead of
-raw XML surgery.
+A [Hermes](https://github.com/NousResearch/hermes-agent) plugin for **safely editing Word, PowerPoint and
+Excel files**. It gives the agent 14 guarded tools built on Paper Instruments'
+[paper-docx](https://github.com/paper-instruments/paper-docx),
+[paper-pptx](https://github.com/paper-instruments/paper-pptx) and
+[paper-xlsx](https://github.com/paper-instruments/paper-xlsx). Those libraries give you tracked changes,
+format-preserving edits and honest refusals, so nothing gets done by raw XML surgery. You also get a **Desk** page
+where you watch the work and control it: folders, workstreams, before/after previews, diffs, accept/reject and revert.
 
-## The model
+![The Desk: needs-you queue, folders on the desk, recent workstreams](docs/screenshots/desk-home.png)
 
-- **Folder** — a directory you put on the Desk. The agent may only *edit* files inside one;
-  anything else is refused with `outside_desk`. Reads work on any readable file.
-- **Workstream** — one request. A chat that edits Desk files is bound to a workstream automatically;
-  the Desk page can also queue one and hand it to a session.
-- **Receipt** — every change: before/after sha256, a byte-exact backup, and the library's own
-  report (paper receipt / compare / recalc result). `office_receipt action=revert` restores the backup.
-- **Needs you** — tracked Word changes and refused edits mark the workstream for your review.
+## Why it is safe
 
-Writes are atomic (temp file + rename) and narrow (`patch_save` / preserve-mode saves keep every
-untouched part byte-identical). A refusal never modifies the file. LibreOffice is used only to
-recalculate Excel formula caches, into a candidate that is verified before replacing the file.
+- **Edits stay inside your Desk folders.** The agent can only *edit* files inside a folder you put on the Desk.
+  Anything else is refused with `outside_desk`. It can still *read* any readable file.
+- **Every change gets a receipt.** A receipt holds the before/after sha256, a byte-exact backup and the library's own
+  report. `office_receipt action=revert` restores the backup.
+- **Writes are atomic and narrow.** Each write goes to a temp file and is then renamed into place. `patch_save` and
+  the preserve-mode saves leave every untouched part byte-identical.
+- **A refusal leaves the file byte-identical.** Refusals come back as
+  `{"ok": false, "refused": true, "reason", "message", "hint"}`.
+- **Word edits wait for you.** Edits are made as tracked changes, which you accept or reject in Word or on the
+  Desk. Tracked changes and refused edits flag the workstream as **Needs you**.
+- **LibreOffice is only used for formula caches.** It recalculates Excel formula caches into a candidate file,
+  and that candidate is checked before it replaces the original.
+
+## Install
+
+hermes-office needs Python ≥ 3.11 and must be installed in the **same Python environment as Hermes**.
+
+```bash
+# 1. The Paper Instruments libraries (they provide the `docx`, `pptx` and `openpyxl` import names)
+pip install paper-docx paper-pptx paper-xlsx
+
+# 2. The plugin
+pip install git+https://github.com/DECRUX9812/hermes-office.git@v0.1.0
+```
+
+> [!WARNING]
+> **Never install the Paper libraries next to `python-docx`, `python-pptx` or `openpyxl` in the same environment.**
+> The Paper forks *replace* those packages and use the same import names. If both are installed, one overwrites the
+> other and you get the wrong engine without any error. If a stock package is already there, uninstall it first
+> (`pip uninstall python-docx python-pptx openpyxl`), or use a dedicated venv. If the forks are not the ones being
+> imported, the tools report themselves as unavailable.
+
+Optional: install [LibreOffice](https://www.libreoffice.org/) (`soffice` on `PATH`) to enable `xlsx_recalc`.
+
+### Enable it in Hermes
+
+`pip install` registers the `hermes_agent.plugins` entry point (`hermes-office = hermes_office.plugin:register`).
+Then enable the plugin in `$HERMES_HOME/config.yaml`:
+
+```yaml
+plugins:
+  enabled:
+    - hermes-office
+```
+
+Or, as a directory plugin (useful while developing):
+
+```bash
+git clone https://github.com/DECRUX9812/hermes-office.git "$HERMES_HOME/plugins/hermes-office"
+```
+
+Once the plugin is enabled, `hermes dashboard` and `hermes serve` serve the Desk backend routes at
+`/api/plugins/hermes-office/`. The Desk desktop page is `desktop/plugin.js`. To install it into Hermes Desktop, see
+[desktop/README.md](desktop/README.md) and [INTEGRATION.md](INTEGRATION.md).
+
+## Usage
+
+Put a folder on the Desk, then ask for changes in plain language:
+
+> Put `~/Clients/Northwind` on my desk. In *Services Agreement.docx*, change the payment term from 30 to 45 days
+> as a tracked change, and add a comment explaining why.
+
+> In *Campaign Budget FY26.xlsx*, insert a row for "Influencers" under Paid Social at 12,000, recalculate,
+> and show me what changed.
+
+> Bring slide 1 of *Appendix.pptx* into *Spring Campaign Review.pptx* using the target deck's theme.
+
+The agent works through the tools below. The bundled `office-review` skill teaches it the workflow: inspect, edit,
+check the receipt, and stop when an edit is refused. A chat that edits Desk files is bound to a **workstream**
+automatically. You review each one on the Desk:
+
+![A Word workstream: tracked change preview with accept/reject](docs/screenshots/workstream-docx.png)
+
+![An Excel workstream: cell-level diff and receipts](docs/screenshots/workstream-xlsx.png)
 
 ## Tools (toolset `office`)
 
@@ -42,32 +109,30 @@ recalculate Excel formula caches, into a candidate that is verified before repla
 | `xlsx_diff` | cell-level workbook diff |
 | `office_receipt` | list/show/revert receipts |
 
-Refusals come back as `{"ok": false, "refused": true, "reason", "message", "hint"}` and the file
-stays byte-identical. The bundled `office-review` skill teaches the agent this workflow.
+## The model
 
-## Install (stock Hermes)
-
-Directory plugin (recommended while developing):
-
-```bash
-git clone <this repo> ~/.hermes/plugins/hermes-office
-# config.yaml:
-#   plugins:
-#     enabled: [hermes-office]
-```
-
-The Paper libraries must be importable in Hermes' Python environment
-(`pip install paper-docx paper-pptx paper-xlsx`; never alongside stock `python-docx`/`python-pptx`/`openpyxl`
-— the forks replace them). `pip install .` also registers the `hermes_agent.plugins` entry point.
-
-The Desk backend routes are served by `hermes dashboard` and `hermes serve` at
-`/api/plugins/hermes-office/` once the plugin is enabled. The Desk desktop page is in
-`desktop/` — see [INTEGRATION.md](INTEGRATION.md) for wiring it into hermes-next or
-hermes-desktop-plus, and `scripts/make_demo_files.py` for demo documents.
+- **Folder**: a directory you put on the Desk. Edits are only allowed inside one.
+- **Workstream**: one request. It is created automatically for a chat, or queued from the Desk page and handed to
+  a session.
+- **Receipt**: the record of one change (hashes, backup, library report). It can be reverted.
+- **Needs you**: a workstream that has tracked changes to review or a refused edit.
 
 ## Development
 
 ```bash
-python scripts/make_demo_files.py /tmp/desk-demo   # demo .docx/.pptx/.xlsx generated by the libraries
-python -m pytest tests -q                          # real files, real libraries, real Hermes discovery
+python -m venv .venv && . .venv/bin/activate
+pip install paper-docx paper-pptx paper-xlsx
+pip install -e '.[dev]'
+python -m pytest tests -q
 ```
+
+- The tests use real files generated by the libraries (`scripts/make_demo_files.py <dir>`).
+- The xlsx recalc test runs only when LibreOffice is installed.
+- The Hermes discovery tests run only when `hermes_cli` can be imported, or when `HERMES_OFFICE_PYTHON` points to
+  a Python that has hermes-agent installed.
+- To work on the desktop page, see [desktop/README.md](desktop/README.md).
+
+## License
+
+[MIT](LICENSE). paper-docx, paper-pptx and paper-xlsx are also MIT-licensed. hermes-office depends on them;
+it does not vendor them.

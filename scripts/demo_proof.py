@@ -11,6 +11,7 @@ Demonstrates:
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
@@ -19,13 +20,23 @@ import sys
 import tempfile
 from pathlib import Path
 
-VENV_PYTHON = Path("/home/user/Code/ship-test/office-venv/.venv/bin/python")
+def _find_hermes_python() -> Path | None:
+    """A Python with hermes-agent installed: $HERMES_OFFICE_PYTHON, else the current interpreter."""
+    override = os.environ.get("HERMES_OFFICE_PYTHON")
+    if override:
+        return Path(override).expanduser()
+    if importlib.util.find_spec("hermes_cli") is not None:
+        return Path(sys.executable)
+    return None
+
+
+VENV_PYTHON = _find_hermes_python()
 REPO = Path(__file__).resolve().parent.parent
 
 
 def run_proof() -> dict:
-    if not VENV_PYTHON.exists():
-        raise RuntimeError(f"Venv python not found at {VENV_PYTHON}")
+    if VENV_PYTHON is None or not VENV_PYTHON.exists():
+        raise RuntimeError("No Python with hermes-agent found; set HERMES_OFFICE_PYTHON")
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="office-proof-"))
     try:

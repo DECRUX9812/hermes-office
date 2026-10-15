@@ -6,10 +6,9 @@ Serves desktop/dev/ static files at / and mounts the REAL backend router from
 plugin.js renders in a plain browser against real data. HERMES_HOME comes from
 the environment (the plugin's data dir derives from it).
 
-Run with the office venv python:
+Run with a Python that has hermes-office's dependencies plus fastapi/uvicorn:
 
-    HERMES_HOME=/tmp/desk-hermes-home ~/Code/ship-test/office-venv/.venv/bin/python \
-        desktop/dev/serve.py --repo ~/Code/hermes-office-wt/e1 --port 9341
+    HERMES_HOME=$(mktemp -d) python desktop/dev/serve.py --repo . --port 9341
 """
 
 from __future__ import annotations

@@ -1,7 +1,28 @@
-.hermes/
-.task/
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
 .pytest_cache/
+
+# Node / desktop dev harness
 node_modules/
 desktop/dev/dist/
+
+# Secrets and local env
+.env
+.env.*
+
+# Local agent / workspace state (never published)
+.hermes/
+.task/
+.oc/
+devloop/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

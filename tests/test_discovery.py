@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
@@ -11,12 +12,22 @@ import pytest
 
 from conftest import REPO
 
-VENV_PYTHON = Path("/home/user/Code/ship-test/office-venv/.venv/bin/python")
+def _find_hermes_python() -> Path | None:
+    """A Python with hermes-agent installed: $HERMES_OFFICE_PYTHON, else the current interpreter."""
+    override = os.environ.get("HERMES_OFFICE_PYTHON")
+    if override:
+        return Path(override).expanduser()
+    if importlib.util.find_spec("hermes_cli") is not None:
+        return Path(sys.executable)
+    return None
+
+
+VENV_PYTHON = _find_hermes_python()
 
 
 def _venv() -> Path:
-    if not VENV_PYTHON.exists():
-        pytest.skip("office venv is not built")
+    if VENV_PYTHON is None or not VENV_PYTHON.exists():
+        pytest.skip("hermes-agent is not installed (set HERMES_OFFICE_PYTHON to a Python that has it)")
     return VENV_PYTHON
 
 

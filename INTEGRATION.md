@@ -1,6 +1,6 @@
 # Hermes Office: Desktop App Integration Guide
 
-This document describes how to integrate the **Desk** plugin page from `hermes-office` into the **Hermes Desktop** app (`hermes-next`), and how to package it for the `hermes-desktop-plus` add-on bundle.
+This document describes how to integrate the **Desk** plugin page from `hermes-office` into the **Hermes Desktop** app, and how to bundle it in a Hermes Desktop distribution.
 
 ---
 
@@ -35,7 +35,7 @@ The desktop frontend is compiled into a single standard ES module at `desktop/pl
 
 ---
 
-## 1. hermes-next Integrator Instructions
+## 1. Hermes Desktop Integrator Instructions
 
 ### A. Automatic Plugin Discovery (Recommended)
 Hermes Desktop automatically scans `<HERMES_HOME>/desktop-plugins/` for desktop plugin packages.
@@ -50,8 +50,7 @@ Hermes Desktop automatically scans `<HERMES_HOME>/desktop-plugins/` for desktop 
 2. Symlink or copy the compiled plugin folder into the desktop plugins directory:
    ```bash
    mkdir -p "$HERMES_HOME/desktop-plugins/hermes-office"
-   cp ~/Code/hermes-office/desktop/plugin.js "$HERMES_HOME/desktop-plugins/hermes-office/"
-   cp ~/Code/hermes-office/desktop/.hermes-package.json "$HERMES_HOME/desktop-plugins/hermes-office/" 2>/dev/null || true
+   cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/hermes-office/"
    ```
 
 3. When Hermes Desktop launches, the `runtime-loader` discovers `hermes-office`:
@@ -61,7 +60,7 @@ Hermes Desktop automatically scans `<HERMES_HOME>/desktop-plugins/` for desktop 
    - Clicking the briefcase takes the user directly to the Desk page.
 
 ### B. Static In-Tree Vendor Drop-in (Alternative)
-If you wish to vendor the Desk plugin directly into the `hermes-next` repository:
+If you wish to vendor the Desk plugin directly into a Hermes Desktop checkout:
 1. Copy `desktop/src/` into `apps/desktop/src/plugins/hermes-office/`.
 2. In `apps/desktop/src/plugins/registry.ts`, register the entry point:
    ```typescript
@@ -76,39 +75,40 @@ If you wish to vendor the Desk plugin directly into the `hermes-next` repository
 
 ---
 
-## 2. hermes-desktop-plus Add-On Integration
+## 2. Bundling in a Desktop Distribution
 
-For distributions bundling `hermes-desktop-plus`:
+For distributions that ship Hermes Desktop with add-on plugins:
 
 1. **Include Backend Dependency:**
    In your distribution manifest or setup script, ensure `hermes-office` is installed in the python environment:
    ```bash
-   pip install ~/Code/hermes-office
+   pip install paper-docx paper-pptx paper-xlsx
+   pip install git+https://github.com/DECRUX9812/hermes-office.git@v0.1.0
    ```
    Or install editable for active development:
    ```bash
-   pip install -e ~/Code/hermes-office
+   pip install -e .
    ```
 
 2. **Bundle Desktop Assets:**
-   During the packaging step of `hermes-desktop-plus`:
+   During the distribution's packaging step:
    ```bash
    ADDON_DEST="$HERMES_HOME/desktop-plugins/hermes-office"
    mkdir -p "$ADDON_DEST"
-   cp ~/Code/hermes-office/desktop/plugin.js "$ADDON_DEST/"
+   cp desktop/plugin.js "$ADDON_DEST/"
    ```
 
 3. **Verify Imports:**
    Run the verification script to ensure no illegal imports or external dependencies leaked in:
    ```bash
-   node ~/Code/hermes-office/desktop/check-imports.mjs
+   node desktop/check-imports.mjs
    ```
 
 ---
 
 ## 3. Design Standard & UX Compliance
 
-The Desk plugin strictly adheres to `~/Code/hermes-next/DESIGN.md`:
+The Desk plugin strictly adheres to the Hermes Desktop design standard (`apps/desktop/DESIGN.md`):
 
 1. **Three-Zone Hierarchy:**
    - **Zone 1 (Left Rail / Drawer):** Folders registered on your Desk, workstream list per folder, with a dedicated **"Needs you"** filter pinned to the top.
@@ -131,6 +131,9 @@ To verify the Desk plugin independently without running full Electron:
 
 1. **Compile Bundle & Build Harness:**
    ```bash
+   # esbuild/react are borrowed from a Hermes Desktop checkout
+   export HERMES_NODE_MODULES=/path/to/hermes-desktop/node_modules
+
    # Recompile desktop/plugin.js from source
    node desktop/build.mjs
 
@@ -140,8 +143,8 @@ To verify the Desk plugin independently without running full Electron:
 
 2. **Start Dev Server:**
    ```bash
-   HERMES_HOME=/tmp/test-hermes-home ~/Code/ship-test/office-venv/.venv/bin/python \
-       desktop/dev/serve.py --repo ~/Code/hermes-office --port 9341
+   # optional: python scripts/setup_demo_desk.py  (demo Desk state in /tmp/office-demo-home)
+   HERMES_HOME=$(mktemp -d) python desktop/dev/serve.py --repo . --port 9341   # needs fastapi + uvicorn
    ```
 
 3. **Inspect in Browser:**

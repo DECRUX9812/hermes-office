@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install LibreOffice (for xlsx_recalc)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libreoffice-calc
+      - name: Install Paper libraries and plugin
+        run: |
+          python -m pip install --upgrade pip
+          pip install paper-docx paper-pptx paper-xlsx
+          pip install '.[dev]'
+      - name: Check stock python-docx/pptx/openpyxl are not shadowing the forks
+        run: python -c "import docx, pptx, openpyxl; assert all(getattr(m, '__paper_version__', None) for m in (docx, pptx, openpyxl))"
+      - name: Plugin entry point loads
+        run: |
+          python - <<'PY'
+          from importlib.metadata import entry_points
+          (ep,) = [e for e in entry_points(group="hermes_agent.plugins") if e.name == "hermes-office"]
+          assert callable(ep.load()), ep
+          print("entry point ok:", ep.value)
+          PY
+      - name: Tests
+        run: python -m pytest tests -q
+
+  desktop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Desktop bundle imports and colours
+        run: node desktop/check-imports.mjs

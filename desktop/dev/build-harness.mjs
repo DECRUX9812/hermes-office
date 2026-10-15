@@ -7,7 +7,11 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const hermesModules = '/home/user/Code/hermes-next/node_modules'
+const hermesModules = process.env.HERMES_NODE_MODULES
+if (!hermesModules) {
+  console.error('Set HERMES_NODE_MODULES to a Hermes Desktop node_modules dir (esbuild, react, react-dom).')
+  process.exit(2)
+}
 const esbuild = await import(
   pathToFileURL(process.env.HERMES_ESBUILD ?? join(hermesModules, 'esbuild/lib/main.js')).href
 )
