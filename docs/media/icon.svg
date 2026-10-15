@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#26324a"/>
+      <stop offset="1" stop-color="#151c2c"/>
+    </linearGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#tile)"/>
+  <!-- desk surface -->
+  <rect x="84" y="384" width="344" height="22" rx="11" fill="#5b6b86"/>
+  <rect x="120" y="406" width="20" height="40" rx="6" fill="#3f4c63"/>
+  <rect x="372" y="406" width="20" height="40" rx="6" fill="#3f4c63"/>
+  <!-- sheet (back left) -->
+  <g transform="rotate(-12 170 270)" filter="url(#sh)">
+    <rect x="96" y="160" width="150" height="196" rx="16" fill="#f4f6fa"/>
+    <rect x="96" y="160" width="150" height="40" rx="16" fill="#2f9e6e"/>
+    <rect x="96" y="184" width="150" height="16" fill="#2f9e6e"/>
+    <g stroke="#9fb3c8" stroke-width="5">
+      <line x1="114" y1="236" x2="228" y2="236"/><line x1="114" y1="270" x2="228" y2="270"/>
+      <line x1="114" y1="304" x2="228" y2="304"/><line x1="152" y1="216" x2="152" y2="336"/>
+      <line x1="190" y1="216" x2="190" y2="336"/>
+    </g>
+  </g>
+  <!-- slide (back right) -->
+  <g transform="rotate(12 342 270)" filter="url(#sh)">
+    <rect x="266" y="160" width="150" height="196" rx="16" fill="#f4f6fa"/>
+    <rect x="266" y="160" width="150" height="40" rx="16" fill="#e07a3a"/>
+    <rect x="266" y="184" width="150" height="16" fill="#e07a3a"/>
+    <rect x="286" y="222" width="110" height="64" rx="8" fill="#f2c4a6"/>
+    <rect x="286" y="302" width="80" height="10" rx="5" fill="#9fb3c8"/>
+    <rect x="286" y="322" width="56" height="10" rx="5" fill="#9fb3c8"/>
+  </g>
+  <!-- document (front) -->
+  <g filter="url(#sh)">
+    <rect x="176" y="118" width="160" height="236" rx="18" fill="#ffffff"/>
+    <rect x="176" y="118" width="160" height="44" rx="18" fill="#3b78e7"/>
+    <rect x="176" y="144" width="160" height="18" fill="#3b78e7"/>
+    <rect x="198" y="186" width="116" height="11" rx="5.5" fill="#9fb3c8"/>
+    <rect x="198" y="210" width="96" height="11" rx="5.5" fill="#9fb3c8"/>
+    <!-- tracked change: struck + inserted -->
+    <rect x="198" y="234" width="52" height="11" rx="5.5" fill="#e5737a"/>
+    <rect x="196" y="238" width="56" height="3" fill="#b4343c"/>
+    <rect x="258" y="234" width="56" height="11" rx="5.5" fill="#3b78e7"/>
+    <rect x="198" y="258" width="106" height="11" rx="5.5" fill="#9fb3c8"/>
+    <rect x="198" y="282" width="80" height="11" rx="5.5" fill="#9fb3c8"/>
+  </g>
+  <!-- receipt check -->
+  <circle cx="330" cy="342" r="38" fill="#2f9e6e" stroke="#151c2c" stroke-width="8"/>
+  <path d="M312 343 l12 12 l24 -26" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

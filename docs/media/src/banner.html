@@ -1,0 +1,39 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+  html,body{margin:0;padding:0;width:1200px;height:600px;overflow:hidden}
+  body{font-family:"Inter","Noto Sans","DejaVu Sans",sans-serif;color:#eef2f8;
+    background:radial-gradient(900px 600px at 85% 30%,#24324d 0%,#141b2b 60%,#0e131f 100%);position:relative}
+  .grid{position:absolute;inset:0;background-image:linear-gradient(#ffffff08 1px,transparent 1px),linear-gradient(90deg,#ffffff08 1px,transparent 1px);background-size:40px 40px}
+  .left{position:absolute;left:72px;top:74px;width:540px}
+  .icon{width:132px;height:132px;display:block;margin-bottom:26px}
+  h1{font-size:88px;line-height:1;margin:0 0 18px;font-weight:800;letter-spacing:-2px}
+  p{font-size:28px;line-height:1.3;margin:0 0 28px;color:#c3cddd;font-weight:500}
+  .chips{display:flex;gap:10px;flex-wrap:nowrap}
+  .chip{white-space:nowrap;font-size:17px;font-weight:600;padding:8px 14px;border-radius:999px;background:#ffffff12;border:1px solid #ffffff22;color:#e6ecf5}
+  .chip b{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:9px;vertical-align:1px}
+  .foot{position:absolute;left:72px;bottom:34px;font-size:17px;color:#7f8ca3;letter-spacing:.3px}
+  .win{position:absolute;border-radius:14px;overflow:hidden;background:#f8f9fc;box-shadow:0 30px 70px #0009,0 0 0 1px #ffffff24}
+  .bar{height:30px;background:#e6e9f0;display:flex;align-items:center;gap:8px;padding-left:14px}
+  .bar i{width:11px;height:11px;border-radius:50%;background:#c4cad6;display:block}
+  .win img{display:block}
+  .back{left:690px;top:40px;width:620px;transform:rotate(4deg);opacity:.9}
+  .front{left:610px;top:150px;width:640px;transform:rotate(-3deg)}
+  .front img{width:1024px;margin-left:-446px;margin-top:-142px}
+  .back img{width:1024px;margin-left:-440px;margin-top:-150px}
+  .crop{height:420px;overflow:hidden}
+</style></head><body>
+  <div class="grid"></div>
+  <div class="win back"><div class="bar"><i></i><i></i><i></i></div><div class="crop"><img src="../../screenshots/workstream-xlsx.png"></div></div>
+  <div class="win front"><div class="bar"><i></i><i></i><i></i></div><div class="crop"><img src="../../screenshots/workstream-docx.png"></div></div>
+  <div class="left">
+    <img class="icon" src="../icon.svg">
+    <h1>Office Desk</h1>
+    <p>Guarded Word, PowerPoint and Excel edits for Hermes</p>
+    <div class="chips">
+      <span class="chip"><b style="background:#3b78e7"></b>Tracked changes</span>
+      <span class="chip"><b style="background:#2f9e6e"></b>Receipts</span>
+      <span class="chip"><b style="background:#e07a3a"></b>Revert</span>
+    </div>
+  </div>
+  <div class="foot">Community plugin · office-desk · MIT</div>
+</body></html>
